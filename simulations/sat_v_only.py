@@ -1,15 +1,16 @@
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
-import utils.GetClassicOrbitalElements 
+from utils.GetClassicOrbitalElements import *
+from utils.visualization import plot_classic_orbital_elements
 
 
 r = np.array([10016.34, -17012.52, 7899.28])
 v = np.array([2.5, -1.05, 3.88])
-t = np.linspace(0, 2000000, 10000000)
+t = np.linspace(0, 432000, 100000)
 earth_radius = 6378.0  # in km
 mu = 3.986e5
-thrust = 2  # N (BIT-3 ~1.1 mN)
+thrust = 1.1e-3
 
 # ===================== ADIÇÕES (massa e Busek BIT-3) =====================
 # Dados do BIT-3

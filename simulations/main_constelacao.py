@@ -17,18 +17,13 @@ print("Simulando satélite VH DOWN...")
 res_down = sat_vh_down.simulate()
 
 # unpack dos resultados
-t_up, X_up, nus_up, incs_up = res_up
-t_v, X_v, nus_v, incs_v = res_v
-t_down, X_down, nus_down, incs_down = res_down
-
+t_up, X_up, nus_up, incs_up, elems_up = res_up
+t_v, X_v, nus_v, incs_v, elems_v = res_v
+t_down, X_down, nus_down, incs_down, elems_down = res_down
 # ----------------- Gráficos comparativos -----------------
 t_up, X_up, nus_up, incs_up, elems_up = sat_vh_up.simulate()
 t_v, X_v, nus_v, incs_v, elems_v = sat_v_only.simulate()
-t_down, X_down, nus_down, incs_down, elems_down = sat_vh_down_mass_variation.simulate()
-
-plot_classic_orbital_elements(t_up, elems_up)
-plot_classic_orbital_elements(t_v, elems_v)
-plot_classic_orbital_elements(t_down, elems_down)
+t_down, X_down, nus_down, incs_down, elems_down = sat_vh_down.simulate()
 
 
 # Plot 3D das órbitas
@@ -40,7 +35,8 @@ u, vgrid = np.mgrid[0:2*np.pi:30j, 0:np.pi:15j]
 x_e = earth_radius * np.cos(u)*np.sin(vgrid)
 y_e = earth_radius * np.sin(u)*np.sin(vgrid)
 z_e = earth_radius * np.cos(vgrid)
-ax.plot_wireframe(x_e, y_e, z_e, color="gray", alpha=0.3)
+ax.plot_wireframe(x_e, y_e, z_e, color="g")
+ax.set_box_aspect([1, 1, 1])  
 
 ax.plot3D(X_up[0, :], X_up[1, :], X_up[2, :], 'b-', label="VH Up")
 ax.plot3D(X_v[0, :], X_v[1, :], X_v[2, :], 'g-', label="V Only")

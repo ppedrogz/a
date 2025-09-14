@@ -1,6 +1,6 @@
 import numpy as np
 from dataclasses import dataclass
-from .constants import Bases
+from utils.constants import Bases
 
 
 @dataclass

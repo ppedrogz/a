@@ -1,15 +1,16 @@
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
-import utils.GetClassicOrbitalElements 
+from utils.GetClassicOrbitalElements import *
+from utils.visualization import plot_classic_orbital_elements
 
 
 r = np.array([10016.34, -17012.52, 7899.28])
 v = np.array([2.5, -1.05, 3.88])
-t = np.linspace(0, 2000000, 10000000)
+t = np.linspace(0, 432000, 100000)
 earth_radius = 6378.0  # in km
 mu = 3.986e5
-thrust = 2 # N (BIT-3 ~1.1 mN)
+thrust = 1.1e-3
 
 # ===================== ADIÇÕES (massa e Busek BIT-3) =====================
 # Dados do BIT-3
@@ -22,6 +23,26 @@ m_sat = 20.0       # kg (massa inicial nominal usada no seu aV/aH)
 m0    = 20.0       # kg (massa inicial do estado)
 m_dry = 15.0       # kg (massa seca)  << já existia e mantida
 # ========================================================================
+DUAL_THRUSTERS = True          # True: dois motores; False: seu comportamento original (um motor vetorado)
+
+# Escolha o critério de empuxo:
+# - "sum": cada motor tem T; empuxo total = T_V + T_H (consumo ↑)
+# - "split": reparte o empuxo total T entre os dois (T/2 em V e T/2 em H; consumo ≈ V-only)
+THRUST_MODE = "sum"            # "sum" ou "split"
+
+if DUAL_THRUSTERS:
+    if THRUST_MODE == "sum":
+        T_V = T                # N
+        T_H = T                # N
+    elif THRUST_MODE == "split":
+        T_V = 0.5 * T          # N
+        T_H = 0.5 * T          # N
+    else:
+        raise ValueError("THRUST_MODE deve ser 'sum' ou 'split'.")
+
+    # Permite Isp diferentes (se quiser). Mantive o mesmo do BIT-3.
+    Isp_V = Isp
+    Isp_H = Isp
 
 # ===================== ADIÇÕES (H e janelas em anomalia verdadeira) =====================
 # OBS: aV/aH fixos foram abandonados; usamos a_inst = (T/m)/1000 dentro de x_dot
@@ -71,36 +92,55 @@ def x_dot(t, x):
     h_vec = np.cross(r_vec, v_vec)
     h_norm = np.linalg.norm(h_vec)
 
-    # ---------- PATCH (SUBSTITUIÇÃO): empuxo em RSW ----------
-    # motor ligado enquanto houver propelente; módulo da aceleração T/m (km/s^2)
+     # ---------- EMPUXO: um motor vetorado OU dois motores independentes ----------
     m_cur = max(x[6], 1e-18)                 # kg (evita div/0)
     u = throttle(t, x)                       # 1.0 se m > m_dry, senão 0.0
-    a_inst = (T / m_cur) / 1000.0            # km/s^2 (estado em km e km/s)
 
-    # base RSW: R (radial), S (along-track), W (normal ao plano)
+    # Base RSW
     r_hat = r_vec / (np.linalg.norm(r_vec) + 1e-32)
     h_vec_local = np.cross(r_vec, v_vec)
-    w_hat = h_vec_local / (np.linalg.norm(h_vec_local) + 1e-32)   # normal ao plano orbital
-    s_hat = np.cross(w_hat, r_hat)                                # tangencial (along-track)
+    w_hat = h_vec_local / (np.linalg.norm(h_vec_local) + 1e-32)
+    s_hat = np.cross(w_hat, r_hat)
     s_hat /= (np.linalg.norm(s_hat) + 1e-32)
 
-    # janela em ν (anomalia verdadeira)
+    # Janela em ν para decidir se aplica H
     theta_deg = get_true_anormaly(r_vec, v_vec, mu)
-    fire_H = in_any_window(theta_deg)
+    fire_H = in_any_window(theta_deg)        # True quando dentro da janela
 
-    # V sempre ligado; dentro da janela, rotaciona parte para W
-    alpha = np.deg2rad(45.0) if fire_H else 0.0   # deflexão desejada (ajustável)
-    dir_hat = np.cos(alpha)*s_hat - np.sin(alpha)*w_hat  # |dir_hat|=1
+    if not DUAL_THRUSTERS:
+        # ====== SEU COMPORTAMENTO ORIGINAL (um motor vetorado) ======
+        a_inst = (T / m_cur) / 1000.0        # km/s^2
+        alpha = np.deg2rad(45.0) if fire_H else 0.0
+        # ATENÇÃO: no sat_vh_down.py inverta o sinal da componente W (dir_hat = cos* S  - sin* W)
+        dir_hat = np.cos(alpha)*s_hat + np.sin(alpha)*w_hat
+        if u > 0.0:
+            xdot[3:6] += a_inst * dir_hat
+            xdot[6] = - T/(Isp*g0)           # um único fluxo de massa
+        else:
+            xdot[6] = 0.0
 
-    if u > 0.0:
-        xdot[3:6] += a_inst * dir_hat
-        # consumo de propelente constante enquanto motor ligado
-        xdot[6] = - T/(Isp*g0)
     else:
-        xdot[6] = 0.0
-    # ---------------------------------------------------------
+        # ====== DOIS MOTORES INDEPENDENTES (V e H) ======
+        # Motor V (sempre along-track)
+        aV = (T_V / m_cur) / 1000.0          # km/s^2
+        # Motor H (normal ao plano) só liga na janela
+        aH = (T_H / m_cur) / 1000.0 if fire_H else 0.0
+
+        # Sinais: UP (+W) vs DOWN (−W)
+        #SIGN_H = +1.0     # sat_vh_up.py
+        SIGN_H = -1.0   # sat_vh_down.py  (troque lá)
+
+        if u > 0.0:
+            xdot[3:6] += aV * s_hat + SIGN_H * aH * w_hat
+            # Consumo = soma das duas vazões quando cada motor está ligado
+            mdot_V = T_V/(Isp_V*g0)              # kg/s
+            mdot_H = (T_H/(Isp_H*g0)) if fire_H else 0.0
+            xdot[6] = - (mdot_V + mdot_H)
+        else:
+            xdot[6] = 0.0
 
     return xdot
+    # ------------------------------------------------------------------------------
 
 # >>> Estado inicial inclui massa <<<
 x0 = np.concatenate((r, v, [m0]))
@@ -142,12 +182,13 @@ u_mask = (m_series > m_dry)
 # integrais por soma de Riemann
 dt = np.diff(tt)
 
-# aceleração instantânea (km/s^2) pela força fixa T e massa variável m(t)
-a_inst_series = (T / np.maximum(m_series, 1e-18)) / 1000.0  # [km/s^2]
+# acelerações instantâneas de V e H (com dois motores)
+aV_series = (T_V / np.maximum(m_series, 1e-18)) / 1000.0
+aH_series = (T_H / np.maximum(m_series, 1e-18)) / 1000.0
 
-# Δv_H acumulado (apenas quando H está ligado E há propelente)
-delta_v_H_kms = float(np.sum(a_inst_series[:-1] * dt * (fire_mask[:-1] & u_mask[:-1])))
-delta_v_H_ms  = 1000.0 * delta_v_H_kms  # [m/s]
+# Δv_H só quando janela H ativa E há propelente
+delta_v_H_kms = float(np.sum(aH_series[:-1] * dt * (fire_mask[:-1] & u_mask[:-1])))
+delta_v_H_ms  = 1000.0 * delta_v_H_kms
 
 # "tempo com H ligado" (opcional, só p/ log)
 t_H_on = float(np.sum(dt * fire_mask[:-1]))
