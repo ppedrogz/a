@@ -7,7 +7,7 @@ from utils.visualization import plot_classic_orbital_elements
 
 r = np.array([10016.34, -17012.52, 7899.28])
 v = np.array([2.5, -1.05, 3.88])
-t = np.linspace(0, 432000, 100000)
+t = np.linspace(0, 432000, 100000)#432000
 earth_radius = 6378.0  # in km
 mu = 3.986e5
 thrust = 1.1e-3
