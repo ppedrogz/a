@@ -6,35 +6,91 @@ import sat_v_only
 import sat_vh_down
 
 # Configuração: "first" para primeira órbita, "last" para última órbita
-PLOT_MODE = "first"   # ou "last"
 
-def select_orbit(t, X, nus, incs, elems, earth_radius=6378.0):
-    """Extrai apenas a primeira ou última órbita do resultado."""
-    # calcula período orbital médio inicial
-    a0 = elems[0][0]  # semi-eixo maior inicial
-    mu = 3.986e5
-    T_orb = 2*np.pi*np.sqrt(a0**3/mu)
+mu = 3.986e5  # km^3/s^2
+def select_orbit(t, X, nus, incs, elems, mode: str):
+  
+    nus = np.asarray(nus)
+    incs = np.asarray(incs)
 
-    if PLOT_MODE == "first":
-        mask = t <= T_orb
-    elif PLOT_MODE == "last":
-        mask = t >= (t[-1] - T_orb)
-    else:
-        raise ValueError("PLOT_MODE deve ser 'first' ou 'last'")
+    # "all" ou pouco dado: retorna tudo
+    if mode == "all" or nus.size < 10:
+        return t, X, nus, incs, elems
 
-    return t[mask], X[:, mask], np.array(nus)[mask], np.array(incs)[mask], [elems[k] for k in range(len(mask)) if mask[k]]
+    # ---------- (A) DETECÇÃO ROBUSTA DE WRAPS EM ν ----------
+    crossings = []
+    for i in range(1, nus.size):
+        if (nus[i-1] > 340.0) and (nus[i] < 20.0):
+            crossings.append(i)
+    crossings = np.array(crossings, dtype=int)
+
+    def slice_between(i0, i1):
+        i0 = int(max(0, min(i0, nus.size-2)))
+        i1 = int(max(i0+1, min(i1, nus.size-1)))
+        mask = np.zeros_like(nus, dtype=bool)
+        mask[i0:i1+1] = True
+        t_sel   = t[mask]
+        X_sel   = X[:, mask]
+        nus_sel = nus[mask]
+        inc_sel = incs[mask]
+        elems_sel = [elems[i] for i in range(len(elems)) if mask[i]]
+        return t_sel, X_sel, nus_sel, inc_sel, elems_sel
+
+    if crossings.size >= 2:
+        if mode == "first":
+            return slice_between(crossings[0], crossings[1])
+        else:  # "last"
+            return slice_between(crossings[-2], crossings[-1])
+
+    if crossings.size == 1:
+        if mode == "first":
+            return slice_between(0, crossings[0])
+        else:
+            return slice_between(crossings[0], nus.size-1)
+
+    # ---------- (B) FALLBACK POR PERÍODO (sempre fecha) ----------
+    # Estado inicial:
+    r0 = X[0:3, 0];  v0 = X[3:6, 0]
+    r0n = float(np.linalg.norm(r0))
+    v0n = float(np.linalg.norm(v0))
+    # vis-viva: 1/a = 2/r - v^2/mu
+    a0 = 1.0 / (2.0/r0n - (v0n**2)/mu)
+    T_orb = 2.0*np.pi*np.sqrt(abs(a0)**3/mu)  # s
+
+    if mode == "first":
+        mask = (t - t[0]) <= T_orb
+    else:  # "last"
+        mask = (t[-1] - t) <= T_orb
+
+    # garante quantidade mínima de pontos
+    if mask.sum() < 10:
+        k = max(10, int(0.01 * t.size))
+        mask = np.zeros_like(mask, dtype=bool)
+        if mode == "first":
+            mask[:k] = True
+        else:
+            mask[-k:] = True
+
+    t_sel   = t[mask]
+    X_sel   = X[:, mask]
+    nus_sel = nus[mask]
+    inc_sel = incs[mask]
+    elems_sel = [elems[i] for i in range(len(elems)) if mask[i]]
+    return t_sel, X_sel, nus_sel, inc_sel, elems_sel
 
 # Executa simulações
-print("Simulando satélites...")
-res_up   = sat_vh_up.simulate()
-res_v    = sat_v_only.simulate()
+PLOT_MODE = "last"   # ou "last" ou "all"
+
+print("Simulando satélite VH UP...")
+res_up = sat_vh_up.simulate()
+print("Simulando satélite V ONLY...")
+res_v = sat_v_only.simulate()
+print("Simulando satélite VH DOWN...")
 res_down = sat_vh_down.simulate()
 
-# Seleciona apenas a órbita desejada
-t_up, X_up, nus_up, incs_up, elems_up     = select_orbit(*res_up)
-t_v, X_v, nus_v, incs_v, elems_v          = select_orbit(*res_v)
-t_down, X_down, nus_down, incs_down, elems_down = select_orbit(*res_down)
-
+t_up, X_up, nus_up, incs_up, elems_up         = select_orbit(*res_up,   PLOT_MODE)
+t_v, X_v, nus_v, incs_v, elems_v              = select_orbit(*res_v,    PLOT_MODE)
+t_down, X_down, nus_down, incs_down, elems_dn = select_orbit(*res_down, PLOT_MODE)
 # ---------- Plot 3D ----------
 fig = plt.figure()
 ax = fig.add_subplot(111, projection="3d")

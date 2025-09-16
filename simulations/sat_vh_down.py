@@ -14,7 +14,7 @@ thrust = 0.01
 
 # ===================== ADIÇÕES (massa e Busek BIT-3) =====================
 # Dados do BIT-3
-T   = 0.01       # N (força fixa)
+T   = 0.01     # N (força fixa)
 Isp = 2150.0       # s
 g0  = 9.80665      # m/s^2
 
@@ -237,3 +237,24 @@ def simulate():
     return t, X, np.array(nus_deg), np.array(incs_deg), orbital_elementss
 
 plot_classic_orbital_elements(t, orbital_elementss)
+
+
+fig = plt.figure()
+ax = fig.add_subplot(111, projection="3d")
+earth_radius = 6378.0  # km
+
+# Wireframe da Terra
+u, vgrid = np.mgrid[0:2*np.pi:30j, 0:np.pi:15j]
+x_e = earth_radius * np.cos(u) * np.sin(vgrid)
+y_e = earth_radius * np.sin(u) * np.sin(vgrid)
+z_e = earth_radius * np.cos(vgrid)
+ax.plot_wireframe(x_e, y_e, z_e, color="g", alpha=0.3)
+
+# Trajetória simulada (única)
+ax.plot3D(X[0, :], X[1, :], X[2, :], 'b-', label="Satélite V_H DOWN")
+
+# Ajustes visuais
+ax.set_box_aspect([1, 1, 1])
+ax.set_title("Órbita simulada - Satélite V_H DOWN")
+ax.legend()
+plt.show()
