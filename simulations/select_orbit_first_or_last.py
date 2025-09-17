@@ -9,9 +9,16 @@ import sat_vh_down
 
 mu = 3.986e5  # km^3/s^2
 def select_orbit(t, X, nus, incs, elems, mode: str):
-  
+
+
     nus = np.asarray(nus)
     incs = np.asarray(incs)
+    n = min(len(t), X.shape[1], len(nus), len(incs), len(elems))
+    t = t[:n]
+    X = X[:, :n]
+    nus = nus[:n]
+    incs = incs[:n]
+    elems = elems[:n]
 
     # "all" ou pouco dado: retorna tudo
     if mode == "all" or nus.size < 10:

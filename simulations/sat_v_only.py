@@ -87,7 +87,7 @@ def x_dot(t, x):
 # >>> Estado inicial inclui massa <<<
 x0 = np.concatenate((r, v, [m0]))
 
-sol = solve_ivp(x_dot, (t[0], t[-1]), x0, t_eval=t, method='RK45')
+sol = solve_ivp(x_dot, (t[0], t[-1]), x0, t_eval=t, method='RK45')#, max_step=30.0)
 
 X = sol.y
 
