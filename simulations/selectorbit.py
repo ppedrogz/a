@@ -13,7 +13,6 @@ def select_orbit(t, X, nus, incs, elems, mode: str):
     nus = np.asarray(nus)
     incs = np.asarray(incs)
 
-    
     # "all" ou pouco dado: retorna tudo
     if mode == "all" or nus.size < 10:
         return t, X, nus, incs, elems
@@ -79,9 +78,8 @@ def select_orbit(t, X, nus, incs, elems, mode: str):
     elems_sel = [elems[i] for i in range(len(elems)) if mask[i]]
     return t_sel, X_sel, nus_sel, inc_sel, elems_sel
 
+# Executa simulações
 PLOT_MODE = "last"   # ou "last" ou "all"
-
-# Seleciona apenas a órbita desejada
 
 print("Simulando satélite VH UP...")
 res_up = sat_vh_up.simulate()
@@ -116,4 +114,12 @@ plt.show()
 # Inclinação vs anomalia verdadeira
 plt.figure()
 plt.plot(nus_up, incs_up, 'b.', ms=0.7, label="VH Up")
-
+plt.plot(nus_v, incs_v, 'g.', ms=0.7, label="V Only")
+plt.plot(nus_down, incs_down, 'r.', ms=0.7, label="VH Down")
+plt.xlim(0, 360)
+plt.xlabel("Anomalia Verdadeira ν [graus]")
+plt.ylabel("Inclinação i [graus]")
+plt.title(f"Inclinação vs ν ({PLOT_MODE} orbit)")
+plt.legend()
+plt.grid(alpha=0.3)
+plt.show()

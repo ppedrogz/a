@@ -10,11 +10,11 @@ v = np.array([2.5, -1.05, 3.88])
 t = np.linspace(0, 432000, 100000)#432000
 earth_radius = 6378.0  # in km
 mu = 3.986e5
-thrust = 1.1e-3
+thrust = 0.01
 
 # ===================== ADIÇÕES (massa e Busek BIT-3) =====================
 # Dados do BIT-3
-T   = 1.1e-3   # N (força fixa)
+T   = 0.01  # N (força fixa)
 Isp = 2150.0       # s
 g0  = 9.80665      # m/s^2
 
@@ -109,7 +109,7 @@ nus_deg = np.array(nus_deg)
 incs_deg = np.array(incs_deg)
 
 # ---------- Δv numérico ----------
-tt = sol.t
+tt = t
 r_norm_series = np.linalg.norm(X[0:3, :].T, axis=1)
 v_norm_series = np.linalg.norm(X[3:6, :].T, axis=1)
 m_series       = X[6, :]
