@@ -1,9 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-import sat_vh_up
-import sat_v_only
-import sat_vh_down
+import simulations.sat_vh_up as sat_vh_up
+import simulations.Apogeu.sat_v_only as sat_v_only
+import simulations.Apogeu.sat_vh_down as sat_vh_down
 
 # Configuração: "first" para primeira órbita, "last" para última órbita
 

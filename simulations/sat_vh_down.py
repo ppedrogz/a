@@ -47,7 +47,7 @@ if DUAL_THRUSTERS:
 # ===================== ADIÇÕES (H e janelas em anomalia verdadeira) =====================
 # OBS: aV/aH fixos foram abandonados; usamos a_inst = (T/m)/1000 dentro de x_dot
 THRUST_INTERVAL_DEG = 30.0
-MEAN_THETA_LIST_DEG = [180.0]
+MEAN_THETA_LIST_DEG = [0] #180° - apogeu # 0° - perigeu
 
 def throttle(t, x):
     # Sempre ligado enquanto m > m_dry
@@ -203,13 +203,36 @@ else:
 arg = np.clip(delta_v_H_kms/(2.0*v_apo), -1.0, 1.0)
 delta_i_ideal_deg = float(np.degrees(2.0*np.arcsin(arg)))
 
+# --- velocidade média no centro da janela (peri ou apo) ---
+if 0.0 in MEAN_THETA_LIST_DEG:  # janela centrada no perigeu
+    if np.any(fire_mask):
+        v_center = float(np.mean(v_norm_series[fire_mask]))
+    else:
+        v_center = float(np.max(v_norm_series))  # fallback
+    print(f"v_perigeu (km/s):           {v_center:.9f}")
+
+elif 180.0 in MEAN_THETA_LIST_DEG:  # janela centrada no apogeu
+    if np.any(fire_mask):
+        v_center = float(np.mean(v_norm_series[fire_mask]))
+    else:
+        v_center = float(np.min(v_norm_series))  # fallback
+    print(f"v_apogeu (km/s):            {v_center:.9f}")
+else:
+    v_center = float(np.mean(v_norm_series))  # default
+    print(f"v_médio janela (km/s):      {v_center:.9f}")
+
+# --- Δi_ideal correspondente ---
+arg = np.clip(delta_v_H_kms/(2.0*v_center), -1.0, 1.0)
+delta_i_ideal_deg = float(np.degrees(2.0*np.arcsin(arg)))
+
+
 # Δi simulado (referenciado ao início)
 delta_i_sim_deg = incs_deg - incs_deg[0]
 
 print("\n=== Analítico × Simulado (várias órbitas) ===")
 print(f"Tempo com H ligado (s):     {t_H_on:.6f}")
 print(f"Δv_H acumulado (m/s):       {delta_v_H_ms:.6f}")
-print(f"v_apogeu (km/s):            {v_apo:.9f}")
+
 print(f"Δi_ideal (graus):           {delta_i_ideal_deg:.9f}")
 print(f"Δi_sim (último - inicial):  {delta_i_sim_deg[-1]:.9f}")
 

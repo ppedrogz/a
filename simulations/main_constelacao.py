@@ -2,9 +2,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # importa cada propagador (cada um deve ter uma função simulate() que retorna resultados)
-import sat_vh_up
-import sat_v_only
-import sat_vh_down
+import simulations.sat_vh_up as sat_vh_up
+import simulations.Apogeu.sat_v_only as sat_v_only
+import simulations.Apogeu.sat_vh_down as sat_vh_down
 
 # Executa as simulações
 print("Simulando satélite VH UP...")
