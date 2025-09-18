@@ -73,9 +73,16 @@ def get_argument_of_perigee(r: np.typing.NDArray, v: np.typing.NDArray, mu: floa
 def get_true_anormaly(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
     e = get_eccentricity_vector(r, v, mu)
 
-    v_rad = np.acos(np.dot(e, r)/ (np.linalg.norm(e)*np.linalg.norm(r)))
-    v = np.rad2deg(v_rad)
+    denom = np.linalg.norm(e) * np.linalg.norm(r)
+    cos_v = np.dot(e, r) / denom
+    cos_v = np.clip(cos_v, -1.0, 1.0)
 
+    v_rad = np.arccos(cos_v)  # [0, π]
+
+    if np.dot(r, v) < 0.0:
+        v_rad = 2.0 * np.pi - v_rad
+
+    v = np.degrees(v_rad)  # converte para graus
     return v
 
 
