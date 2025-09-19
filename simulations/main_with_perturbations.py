@@ -221,6 +221,7 @@ ax.plot3D(X_dn_off[0,:],X_dn_off[1,:],X_dn_off[2,:],'--', color="#d62728", label
 
 ax.set_title("COM (linha cheia) vs SEM J2 (tracejada)")
 ax.legend()
+ax.axis('equal')
 plt.show()
 
 # --------- RAAN(t): deriva secular por J2 (desenrolado)

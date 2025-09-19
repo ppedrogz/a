@@ -22,6 +22,57 @@ m0    = 20.0   # kg
 m_dry = 15.0   # kg
 # ========================================================================
 
+#definição do inclinação para 97.5 do ITASAT
+def _R3(angle):
+    c, s = np.cos(angle), np.sin(angle)
+    return np.array([[ c, -s, 0.0],
+                     [ s,  c, 0.0],
+                     [0.0, 0.0, 1.0]])
+
+def _R1(angle):
+    c, s = np.cos(angle), np.sin(angle)
+    return np.array([[1.0, 0.0, 0.0],
+                     [0.0,  c, -s ],
+                     [0.0,  s,  c ]])
+
+def _coe_to_rv(a, e, i_deg, raan_deg, argp_deg, nu_deg, mu):
+    i  = np.deg2rad(i_deg)
+    O  = np.deg2rad(raan_deg)   # RAAN (Ω)
+    w  = np.deg2rad(argp_deg)   # argumento do perigeu (ω)
+    nu = np.deg2rad(nu_deg)     # anomalia verdadeira (ν)
+
+    p = a * (1.0 - e**2)
+
+    r_pqw = np.array([
+        p * np.cos(nu) / (1.0 + e*np.cos(nu)),
+        p * np.sin(nu) / (1.0 + e*np.cos(nu)),
+        0.0
+    ])
+    v_pqw = np.array([
+        -np.sqrt(mu/p) * np.sin(nu),
+        +np.sqrt(mu/p) * (e + np.cos(nu)),
+        0.0
+    ])
+
+    C = _R3(O) @ _R1(i) @ _R3(w)
+    return C @ r_pqw, C @ v_pqw
+
+def reseed_state_with_inclination(r, v, mu, i_target_deg):
+    # mede elementos atuais com SUAS rotinas
+    a0  = get_major_axis(r, v, mu)
+    e0  = get_eccentricity(r, v, mu)
+    O0  = get_ascending_node(r, v, mu)
+    w0  = get_argument_of_perigee(r, v, mu)
+    nu0 = get_true_anormaly(r, v, mu)   # já em [0,360)
+
+    # troca apenas a inclinação
+    return _coe_to_rv(a0, e0, i_target_deg, O0, w0, nu0, mu)
+
+# ======== alvo de inclinação inicial (em graus) ========
+I0_TARGET_DEG = 97.5
+r, v = reseed_state_with_inclination(r, v, mu, I0_TARGET_DEG)
+print(f"[check] i0 = {get_inclination(r, v, mu):.6f} deg")
+
 # ===================== Janelas em anomalia verdadeira (não usado aqui) =====================
 THRUST_INTERVAL_DEG = 30.0
 MEAN_THETA_LIST_DEG = [180.0]
@@ -113,7 +164,7 @@ a_inst_series = (T / np.maximum(m_series, 1e-18)) / 1000.0
 delta_v_kms = float(np.sum(a_inst_series[:-1] * dt * (m_series[:-1] > m_dry)))
 delta_v_ms  = 1000.0 * delta_v_kms
 
-print("\n=== Satélite V-only ===")
+print("\n=== Dados V-only ===")
 print(f"Δv acumulado (m/s):        {delta_v_ms:.6f}")
 print(f"Δi sim (último - inicial): {incs_deg[-1] - incs_deg[0]:.9f}")
 
@@ -183,7 +234,7 @@ ax.plot3D(X[0, :], X[1, :], X[2, :], 'b-', label="Satélite V-only")
 ax.set_box_aspect([1, 1, 1])
 ax.set_title("Órbita simulada - Satélite V-only")
 ax.legend()
-
+ax.axis('equal')
 # ---------- plot i(nu) com cor única ----------
 fig2, ax2 = plt.subplots()
 plot_i_vs_nu_segmentado(nus_deg, incs_deg, ax=ax2, color="green", lw=1.5, label='i vs. nu')

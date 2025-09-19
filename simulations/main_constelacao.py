@@ -67,6 +67,7 @@ ax.plot3D(X_down[0, :], X_down[1, :], X_down[2, :], '-', color="#d62728", label=
 
 ax.set_title("Constelação - 3 Satélites")
 ax.legend()
+ax.axis('equal')
 plt.show()
 
 # ----------------- Inclinação vs anomalia verdadeira (3 séries, cor fixa) -----------------
