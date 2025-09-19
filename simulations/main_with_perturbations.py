@@ -7,51 +7,33 @@ import sat_vh_up as sat_vh_up
 import sat_v_only as sat_v_only
 import sat_vh_down as sat_vh_down
 
-
-from perturbations import EarthParams, PerturbationFlags, accel_perturbations
-
-# ========================= callback de perturbações =========================
-# Unidades: km, s, km^3/s^2 -> retorno em km/s^2
-P = EarthParams()                  # mu, Re, J2 padrão
-FLAGS = PerturbationFlags(j2=True) 
-
-def external_accel(r_vec: np.ndarray, v_vec: np.ndarray, t: float) -> np.ndarray:
-    """
-    Perturbações totais adicionadas pelo MAIN.
-    Retorna (3,) km/s^2. Hoje: apenas J2.
-    """
-    return accel_perturbations(r_vec, v_vec, t, params=P, flags=FLAGS)
-
-# ========================= helpers para invocação =========================
-def _try_call_simulate(mod):
-    """
-    Tenta (1) passar o callback via kwargs;
-          (2) injetar atributo 'external_accel' no módulo;
-          (3) chamar puro e avisar se não deu para injetar.
-    """
-    # (1) tenta via kwargs (se simulate aceitar **kwargs)
-    try:
-        return mod.simulate(external_accel=external_accel)
-    except TypeError:
-        # (2) injeta atributo no módulo (se o código procurar por isso)
-        try:
-            setattr(mod, "external_accel", external_accel)
-            return mod.simulate()
-        except Exception as e:
-            print(f"[WARN] {mod.__name__}: não foi possível injetar callback ({e}). Rodando sem perturbações.")
-            # (3) roda sem perturbações
-            return mod.simulate()
-
 # ========================= roda as três simulações =========================
 print("Simulando satélite VH UP...")
-t_up, X_up, nus_up, incs_up, elems_up = _try_call_simulate(sat_vh_up)
+res_up = sat_vh_up.simulate()
 
 print("Simulando satélite V ONLY...")
-t_v, X_v, nus_v, incs_v, elems_v = _try_call_simulate(sat_v_only)
+res_v = sat_v_only.simulate()
 
 print("Simulando satélite VH DOWN...")
-t_down, X_down, nus_down, incs_down, elems_down = _try_call_simulate(sat_vh_down)
+res_down = sat_vh_down.simulate()
 
+
+t_up, X_up, nus_up, incs_up, elems_up = res_up
+t_v, X_v, nus_v, incs_v, elems_v = res_v
+t_down, X_down, nus_down, incs_down, elems_down = res_down
+# ----------------- Gráficos comparativos -----------------
+t_up, X_up, nus_up, incs_up, elems_up = sat_vh_up.simulate()
+t_v, X_v, nus_v, incs_v, elems_v = sat_v_only.simulate()
+t_down, X_down, nus_down, incs_down, elems_down = sat_vh_down.simulate()
+
+from perturbations import EarthParams, diagnose_orbital_changes
+
+P = EarthParams()  # (mu, Re, J2)
+
+print("\n##### Diagnósticos de elementos (efeitos compatíveis com J2) #####")
+diag_up   = diagnose_orbital_changes(t_up,   X_up,   params=P, label="VH UP")
+diag_v    = diagnose_orbital_changes(t_v,    X_v,    params=P, label="V ONLY")
+diag_down = diagnose_orbital_changes(t_down, X_down, params=P, label="VH DOWN")
 
 fig = plt.figure()
 ax = fig.add_subplot(111, projection="3d")

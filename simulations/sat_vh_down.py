@@ -47,7 +47,7 @@ if DUAL_THRUSTERS:
 # ===================== ADIÇÕES (H e janelas em anomalia verdadeira) =====================
 # OBS: aV/aH fixos foram abandonados; usamos a_inst = (T/m)/1000 dentro de x_dot
 THRUST_INTERVAL_DEG = 30.0
-MEAN_THETA_LIST_DEG = [0] #180° - apogeu # 0° - perigeu
+MEAN_THETA_LIST_DEG = [180] #180° - apogeu # 0° - perigeu
 
 def throttle(t, x):
     # Sempre ligado enquanto m > m_dry
