@@ -4,61 +4,44 @@ import matplotlib.pyplot as plt
 from utils.GetClassicOrbitalElements import *
 from utils.visualization import plot_classic_orbital_elements
 
-
+# ===================== condições iniciais =====================
 r = np.array([10016.34, -17012.52, 7899.28])
 v = np.array([2.5, -1.05, 3.88])
-t = np.linspace(0, 432000, 100000) #432000
-earth_radius = 6378.0  # in km
+t = np.linspace(0, 432000, 100000)  # 5 dias, 100k pontos
+earth_radius = 6378.0  # km
 mu = 3.986e5
-thrust = 0.01
 
-# ===================== ADIÇÕES (massa e Busek BIT-3) =====================
-# Dados do BIT-3
-T   = 0.01   # N (força fixa)
+# ===================== Dados de propulsão =====================
+T   = 0.01         # N
 Isp = 2150.0       # s
 g0  = 9.80665      # m/s^2
+m0  = 20.0         # kg
+m_dry = 15.0       # kg
 
-# Estado de massa
-m_sat = 20.0       # kg (massa inicial nominal usada no seu aV/aH)
-m0    = 20.0       # kg (massa inicial do estado)
-m_dry = 15.0       # kg (massa seca)  << já existia e mantida
-# ========================================================================
-DUAL_THRUSTERS = True          # True: dois motores; False: seu comportamento original (um motor vetorado)
-
-# Escolha o critério de empuxo:
-# - "sum": cada motor tem T; empuxo total = T_V + T_H (consumo ↑)
-# - "split": reparte o empuxo total T entre os dois (T/2 em V e T/2 em H; consumo ≈ V-only)
-THRUST_MODE = "sum"            # "sum" ou "split"
+# Dois motores independentes (V e H)
+DUAL_THRUSTERS = True
+THRUST_MODE = "sum"  # "sum" ou "split"
 
 if DUAL_THRUSTERS:
     if THRUST_MODE == "sum":
-        T_V = T                # N
-        T_H = T                # N
+        T_V, T_H = T, T
     elif THRUST_MODE == "split":
-        T_V = 0.5 * T          # N
-        T_H = 0.5 * T          # N
+        T_V, T_H = 0.5*T, 0.5*T
     else:
         raise ValueError("THRUST_MODE deve ser 'sum' ou 'split'.")
+    Isp_V, Isp_H = Isp, Isp
 
-    # Permite Isp diferentes (se quiser). Mantive o mesmo do BIT-3.
-    Isp_V = Isp
-    Isp_H = Isp
-
-# ===================== ADIÇÕES (H e janelas em anomalia verdadeira) =====================
-# OBS: aV/aH fixos foram abandonados; usamos a_inst = (T/m)/1000 dentro de x_dot
+# ===================== Janelas em anomalia verdadeira =====================
 THRUST_INTERVAL_DEG = 30.0
-MEAN_THETA_LIST_DEG = [180] #180° - apogeu # 0° - perigeu
+MEAN_THETA_LIST_DEG = [180.0]  # apogeu
 
 def throttle(t, x):
-    # Sempre ligado enquanto m > m_dry
     return 1.0 if x[6] > m_dry else 0.0
 
 def wrap_deg(a):
-    """Normaliza ângulo para [0, 360)."""
     return np.remainder(a, 360.0)
 
 def angle_in_window_deg(theta_deg, center_deg, width_deg):
-    """Retorna True se theta estiver dentro da janela centrada em center_deg com largura width_deg."""
     half = 0.5*width_deg
     lo = wrap_deg(center_deg - half)
     hi = wrap_deg(center_deg + half)
@@ -66,89 +49,69 @@ def angle_in_window_deg(theta_deg, center_deg, width_deg):
     if lo <= hi:
         return (th >= lo) and (th <= hi)
     else:
-        # janela cruza 0/360
         return (th >= lo) or (th <= hi)
 
 def in_any_window(theta_deg):
-    """Combina a lista de janelas e decide o firing."""
     return any(angle_in_window_deg(theta_deg, cdeg, THRUST_INTERVAL_DEG)
                for cdeg in MEAN_THETA_LIST_DEG)
-# ========================================================================================
 
+# ===================== Dinâmica =====================
 def x_dot(t, x):
     xdot = np.zeros_like(x)
-    xdot[0] = x[3]
-    xdot[1] = x[4]
-    xdot[2] = x[5]
+    xdot[0:3] = x[3:6]
 
-    # Gravidade
     r_vec = x[0:3]
     v_vec = x[3:6]
-    rnorm = np.linalg.norm(r_vec)
+    rnorm = np.linalg.norm(r_vec) + 1e-32
+
+    # Gravidade
     xdot[3:6] = -(mu/(rnorm**3))*r_vec
 
-    # Normas e direção (mantidos)
-    vnorm = np.linalg.norm(v_vec)
-    h_vec = np.cross(r_vec, v_vec)
-    h_norm = np.linalg.norm(h_vec)
-
-    # ---------- EMPUXO: um motor vetorado OU dois motores independentes ----------
-    m_cur = max(x[6], 1e-18)                 # kg (evita div/0)
-    u = throttle(t, x)                       # 1.0 se m > m_dry, senão 0.0
-
     # Base RSW
-    r_hat = r_vec / (np.linalg.norm(r_vec) + 1e-32)
+    r_hat = r_vec / rnorm
     h_vec_local = np.cross(r_vec, v_vec)
     w_hat = h_vec_local / (np.linalg.norm(h_vec_local) + 1e-32)
     s_hat = np.cross(w_hat, r_hat)
     s_hat /= (np.linalg.norm(s_hat) + 1e-32)
 
-    # Janela em ν para decidir se aplica H
+    # Janela de H por nu
     theta_deg = get_true_anormaly(r_vec, v_vec, mu)
-    fire_H = in_any_window(theta_deg)        # True quando dentro da janela
+    fire_H = in_any_window(theta_deg)
+
+    # Empuxo
+    m_cur = max(x[6], 1e-18)
+    u = throttle(t, x)
 
     if not DUAL_THRUSTERS:
-        # ====== SEU COMPORTAMENTO ORIGINAL (um motor vetorado) ======
-        a_inst = (T / m_cur) / 1000.0        # km/s^2
+        a_inst = (T / m_cur) / 1000.0
         alpha = np.deg2rad(45.0) if fire_H else 0.0
-        # ATENÇÃO: no sat_vh_down.py inverta o sinal da componente W (dir_hat = cos* S  - sin* W)
-        dir_hat = np.cos(alpha)*s_hat + np.sin(alpha)*w_hat
+        dir_hat = np.cos(alpha)*s_hat - np.sin(alpha)*w_hat  # DOWN
         if u > 0.0:
             xdot[3:6] += a_inst * dir_hat
-            xdot[6] = - T/(Isp*g0)           # um único fluxo de massa
+            xdot[6] = - T/(Isp*g0)
         else:
             xdot[6] = 0.0
-
     else:
-        # ====== DOIS MOTORES INDEPENDENTES (V e H) ======
-        # Motor V (sempre along-track)
-        aV = (T_V / m_cur) / 1000.0          # km/s^2
-        # Motor H (normal ao plano) só liga na janela
+        aV = (T_V / m_cur) / 1000.0
         aH = (T_H / m_cur) / 1000.0 if fire_H else 0.0
-
-        # Sinais: UP (+W) vs DOWN (−W)
-        SIGN_H = +1.0     # sat_vh_up.py
-        # SIGN_H = -1.0   # sat_vh_down.py  (troque lá)
+        SIGN_H = +1.0  # DOWN
 
         if u > 0.0:
             xdot[3:6] += aV * s_hat + SIGN_H * aH * w_hat
-            # Consumo = soma das duas vazões quando cada motor está ligado
-            mdot_V = T_V/(Isp_V*g0)              # kg/s
+            mdot_V = T_V/(Isp_V*g0)
             mdot_H = (T_H/(Isp_H*g0)) if fire_H else 0.0
             xdot[6] = - (mdot_V + mdot_H)
         else:
             xdot[6] = 0.0
+
     return xdot
 
-
-# >>> Estado inicial inclui massa <<<
+# >>> estado inicial (inclui massa) <<<
 x0 = np.concatenate((r, v, [m0]))
-
-sol = solve_ivp(x_dot, (t[0], t[-1]), x0, t_eval=t, method='RK45')#, max_step=30.0)
-
+sol = solve_ivp(x_dot, (t[0], t[-1]), x0, t_eval=t, method='RK45')
 X = sol.y
 
-# ---------- elementos, ν (0–360) e i ----------
+# ---------- elementos, nu (0–360) e i ----------
 orbital_elementss = []
 nus_deg = []
 incs_deg = []
@@ -156,72 +119,40 @@ for k in range(X.shape[1]):
     r_vec = X[0:3, k]
     v_vec = X[3:6, k]
     orbital_elementss.append(get_orbital_elements(r_vec, v_vec, mu))
-    # anomalia verdadeira (módulo retorna [0,180]); mapeia para (180,360) quando r·v < 0
+
+    # --------- PATCH PRINCIPAL: usar SOMENTE o nu retornado (já em [0,360)) ---------
     nu = get_true_anormaly(r_vec, v_vec, mu)
-    if np.dot(r_vec, v_vec) < 0.0:
-        nu = (360.0 - nu) % 360.0
     nus_deg.append(nu)
-    # inclinação
+
     incs_deg.append(get_inclination(r_vec, v_vec, mu))
 
 nus_deg = np.array(nus_deg)
 incs_deg = np.array(incs_deg)
 
-# ---------- Δv_H e v_apogeu numéricos (várias órbitas) ----------
+# ---------- métricas ----------
 tt = t
 r_norm_series = np.linalg.norm(X[0:3, :].T, axis=1)
 v_norm_series = np.linalg.norm(X[3:6, :].T, axis=1)
-m_series       = X[6, :]
+m_series = X[6, :]
 
-# janela H (em ν) ao longo de toda a simulação
 fire_mask = np.array([in_any_window(nu) for nu in nus_deg], dtype=bool)
-# só há thrust se ainda houver propelente
 u_mask = (m_series > m_dry)
 
-# integrais por soma de Riemann
 dt = np.diff(tt)
-
-# aceleração instantânea (km/s^2) pela força fixa T e massa variável m(t)
-# acelerações instantâneas de V e H (com dois motores)
 aV_series = (T_V / np.maximum(m_series, 1e-18)) / 1000.0
 aH_series = (T_H / np.maximum(m_series, 1e-18)) / 1000.0
 
-# Δv_H só quando janela H ativa E há propelente
 delta_v_H_kms = float(np.sum(aH_series[:-1] * dt * (fire_mask[:-1] & u_mask[:-1])))
 delta_v_H_ms  = 1000.0 * delta_v_H_kms
-
-# "tempo com H ligado" (opcional, só p/ log)
 t_H_on = float(np.sum(dt * fire_mask[:-1]))
 
-# v_apogeu numérico: média da velocidade quando H está ativo
 if np.any(fire_mask):
-    v_apo = float(np.mean(v_norm_series[fire_mask]))
+    v_center = float(np.mean(v_norm_series[fire_mask]))
 else:
-    v_apo = float(np.max(v_norm_series))  # fallback
+    v_center = float(np.min(v_norm_series))  # safe fallback
 
-# Δi_ideal usando v_apo numérico
-arg = np.clip(delta_v_H_kms/(2.0*v_apo), -1.0, 1.0)
+arg = np.clip(delta_v_H_kms/(2.0*v_center), -1.0, 1.0)
 delta_i_ideal_deg = float(np.degrees(2.0*np.arcsin(arg)))
-
-# --- velocidade média no centro da janela (peri ou apo) ---
-if 0.0 in MEAN_THETA_LIST_DEG:  # janela centrada no perigeu
-    if np.any(fire_mask):
-        v_center = float(np.mean(v_norm_series[fire_mask]))
-    else:
-        v_center = float(np.max(v_norm_series))  # fallback
-    print(f"v_perigeu (km/s):           {v_center:.9f}")
-
-elif 180.0 in MEAN_THETA_LIST_DEG:  # janela centrada no apogeu
-    if np.any(fire_mask):
-        v_center = float(np.mean(v_norm_series[fire_mask]))
-    else:
-        v_center = float(np.min(v_norm_series))  # fallback
-    print(f"v_apogeu (km/s):            {v_center:.9f}")
-else:
-    v_center = float(np.mean(v_norm_series))  # default
-    print(f"v_médio janela (km/s):      {v_center:.9f}")
-
-# Δi simulado (referenciado ao início)
 delta_i_sim_deg = incs_deg - incs_deg[0]
 
 print("\n=== Analítico × Simulado (várias órbitas) ===")
@@ -230,47 +161,80 @@ print(f"Δv_H acumulado (m/s):       {delta_v_H_ms:.6f}")
 print(f"Δi_ideal (graus):           {delta_i_ideal_deg:.9f}")
 print(f"Δi_sim (último - inicial):  {delta_i_sim_deg[-1]:.9f}")
 
+# ---------- plot dos elementos (seu utilitário) ----------
+plot_classic_orbital_elements(t, orbital_elementss)
+
+# ---------- plot 3D ----------
+fig = plt.figure()
+ax = fig.add_subplot(111, projection="3d")
+
+# Wireframe da Terra
+u_grid, v_grid = np.mgrid[0:2*np.pi:30j, 0:np.pi:15j]
+x_e = earth_radius * np.cos(u_grid) * np.sin(v_grid)
+y_e = earth_radius * np.sin(u_grid) * np.sin(v_grid)
+z_e = earth_radius * np.cos(v_grid)
+ax.plot_wireframe(x_e, y_e, z_e, color="g", alpha=0.3)
+
+# Trajetória
+ax.plot3D(X[0, :], X[1, :], X[2, :], 'b-', label="Satélite V_H DOWN")
+ax.set_box_aspect([1, 1, 1])
+ax.set_title("Órbita simulada - Satélite V_H DOWN")
+ax.legend()
+
+# ---------- plot i(nu) SEM “dente de serra” (segmentado por wraps) ----------
+def plot_i_vs_nu_segmentado(nu_deg: np.ndarray, inc_deg: np.ndarray, *, ax=None, **plot_kw):
+    nu_deg = np.asarray(nu_deg, dtype=float)
+    inc_deg = np.asarray(inc_deg, dtype=float)
+    if ax is None:
+        fig_loc, ax = plt.subplots()
+
+    # detecta wraps quando volta de ~360 para ~0
+    dn = np.diff(nu_deg)
+    wraps = np.where(dn < -180.0)[0]
+
+    start = 0
+    for w in wraps:
+        ax.plot(nu_deg[start:w+1], inc_deg[start:w+1], **plot_kw)
+        start = w + 1
+    ax.plot(nu_deg[start:], inc_deg[start:], **plot_kw)
+
+    ax.set_xlabel(r'$\nu$ (deg)')
+    ax.set_ylabel(r'$i$ (deg)')
+    ax.set_xlim(0.0, 360.0)
+    ax.grid(True)
+    return ax
+
+fig2, ax2 = plt.subplots()
+plot_i_vs_nu_segmentado(nus_deg, incs_deg, ax=ax2, color="blue", lw=1.5, label="i vs. nu")
+ax2.legend()
+
+plt.show()
+
 def simulate():
-    # >>> Estado inicial inclui massa <<<
+    """
+    Executa a integração com o x_dot deste módulo (VH DOWN) e devolve:
+    (t, X, nus_deg, incs_deg, orbital_elementss)
+    """
+    # estado inicial inclui massa
     x0 = np.concatenate((r, v, [m0]))
 
     sol = solve_ivp(x_dot, (t[0], t[-1]), x0, t_eval=t, method='RK45')
-
     X = sol.y
 
     orbital_elementss = []
     nus_deg = []
     incs_deg = []
+
     for k in range(X.shape[1]):
         r_vec = X[0:3, k]
         v_vec = X[3:6, k]
+
         orbital_elementss.append(get_orbital_elements(r_vec, v_vec, mu))
+
+        # nu já corrige quadrante e retorna [0, 360)
         nu = get_true_anormaly(r_vec, v_vec, mu)
-        if np.dot(r_vec, v_vec) < 0.0:
-            nu = (360.0 - nu) % 360.0
         nus_deg.append(nu)
+
         incs_deg.append(get_inclination(r_vec, v_vec, mu))
 
-    return t, X, np.array(nus_deg), np.array(incs_deg), orbital_elementss
-
-plot_classic_orbital_elements(t, orbital_elementss)
-
-fig = plt.figure()
-ax = fig.add_subplot(111, projection="3d")
-earth_radius = 6378.0  # km
-
-# Wireframe da Terra
-u, vgrid = np.mgrid[0:2*np.pi:30j, 0:np.pi:15j]
-x_e = earth_radius * np.cos(u) * np.sin(vgrid)
-y_e = earth_radius * np.sin(u) * np.sin(vgrid)
-z_e = earth_radius * np.cos(vgrid)
-ax.plot_wireframe(x_e, y_e, z_e, color="g", alpha=0.3)
-
-# Trajetória simulada (única)
-ax.plot3D(X[0, :], X[1, :], X[2, :], 'b-', label="Satélite V_H UP")
-
-# Ajustes visuais
-ax.set_box_aspect([1, 1, 1])
-ax.set_title("Órbita simulada - Satélite V_H UP")
-ax.legend()
-plt.show()
+    return t, X, np.array(nus_deg, dtype=float), np.array(incs_deg, dtype=float), orbital_elementss

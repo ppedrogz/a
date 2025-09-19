@@ -53,18 +53,32 @@ def get_inclination(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> fl
 def get_ascending_node(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
     h = np.cross(r, v)
     n = np.cross(Bases.k, h)
-    Omega_rad = np.acos(np.dot(Bases.i, n)/np.linalg.norm(n))
+
+    if np.linalg.norm(n) > 1e-10:
+        Omega_rad = np.acos(np.dot(Bases.i, n)/np.linalg.norm(n))
+        if n[1] < 0:
+            Omega_rad = 2*np.pi - Omega_rad
+    else:
+        Omega_rad = 0
+
     Omega = np.rad2deg(Omega_rad)
 
     return Omega
 
 
 def get_argument_of_perigee(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
-    e = get_eccentricity_vector(r, v, mu)
+    e_vec = get_eccentricity_vector(r, v, mu)
+    e = np.linalg.norm(e_vec)
     h = np.cross(r, v)
     n = np.cross(Bases.k, h)
 
-    omega_rad = np.acos(np.dot(n, e)/(n*np.linalg.norm(e)))
+    if np.linalg.norm(n) > 1e-10:
+        omega_rad = np.arccos(np.dot(n, e_vec)/(np.linalg.norm(n)*e))
+        if e_vec[2] < 0:
+            omega_rad = 2*np.pi - omega_rad
+    else:
+        omega_rad = 0
+
     omega = np.rad2deg(omega_rad)
 
     return omega
@@ -91,3 +105,19 @@ def get_eccentricity_vector(r: np.typing.NDArray, v: np.typing.NDArray, mu: floa
     e = (np.cross(v, h)/mu) - (r/np.linalg.norm(r))
 
     return e
+
+def get_period(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
+    a = get_major_axis(r, v, mu)
+    period = 2*np.pi*np.sqrt((a**3)/mu)
+
+    return period
+
+
+# KEPLERIAN ELEMENTS
+def get_eccentric_anomaly(theta, e) -> float:
+    E_sin = np.sqrt(1-e**2)*np.sin(theta)
+    E_cos = 1 + e*np.cos(theta)
+
+    E = np.atan2(E_sin, E_cos)
+
+    return E
