@@ -20,7 +20,7 @@ m_dry = 15.0       # kg
 
 
 #adição da perturbação
-from perturbations import external_accel, EarthParams, PerturbationFlags
+from J2 import external_accel, EarthParams, PerturbationFlags
 
 # Flag de módulo para ligar/desligar J2 (não mexe no resto do código)
 _J2_ON = True

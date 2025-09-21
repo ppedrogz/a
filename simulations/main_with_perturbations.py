@@ -13,7 +13,7 @@ import sat_vh_up as sat_vh_up
 import sat_v_only as sat_v_only
 import sat_vh_down as sat_vh_down
 
-from perturbations import EarthParams, diagnose_orbital_changes
+from J2 import EarthParams, diagnose_orbital_changes
 from utils.GetClassicOrbitalElements import (
     get_orbital_elements,
     get_true_anormaly,   # mantém o nome da sua função
