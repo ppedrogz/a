@@ -22,12 +22,12 @@ m0    = 20.0   # kg
 m_dry = 15.0   # kg
 # ========================================================================
 
-
-#adição da perturbação
+# adição da perturbação (J2)
 from J2 import external_accel, EarthParams, PerturbationFlags
 
 # Flag de módulo para ligar/desligar J2 (não mexe no resto do código)
-_J2_ON = True
+_J2_ON = False
+
 def _accel_J2(r_vec, v_vec, t):
     if _J2_ON:
         return external_accel(r_vec, v_vec, t,
@@ -35,7 +35,7 @@ def _accel_J2(r_vec, v_vec, t):
                               flags=PerturbationFlags(j2=True))
     return 0.0 * r_vec  # vetor zero do mesmo shape
 
-#definição do inclinação para 97.5 do ITASAT
+# definição do inclinação para 97.5 do ITASAT
 def _R3(angle):
     c, s = np.cos(angle), np.sin(angle)
     return np.array([[ c, -s, 0.0],
@@ -121,8 +121,8 @@ def x_dot(t, x):
     rnorm = np.linalg.norm(r_vec) + 1e-32
     xdot[3:6] = -(mu/(rnorm**3))*r_vec
 
- # === AQUI: somar J2 no ODE (depois que xdot existe) ===
-    xdot[3:6] += _accel_J2(r_vec, v_vec, t)# adiciona as perturbações
+    # ---------- J2 ----------
+    xdot[3:6] += _accel_J2(r_vec, v_vec, t)   # <--- ADIÇÃO
 
     # ---------- Propulsão só em V ----------
     m_cur = max(x[6], 1e-18)
@@ -184,26 +184,6 @@ print("\n=== Dados V-only ===")
 print(f"Δv acumulado (m/s):        {delta_v_ms:.6f}")
 print(f"Δi sim (último - inicial): {incs_deg[-1] - incs_deg[0]:.9f}")
 
-
-
-def simulate():
-    x0 = np.concatenate((r, v, [m0]))
-    sol = solve_ivp(x_dot, (t[0], t[-1]), x0, t_eval=t, method='RK45')
-    X = sol.y
-
-    orbital_elementss = []
-    nus_deg = []
-    incs_deg = []
-    for k in range(X.shape[1]):
-        r_vec = X[0:3, k]
-        v_vec = X[3:6, k]
-        orbital_elementss.append(get_orbital_elements(r_vec, v_vec, mu))
-        nu = get_true_anormaly(r_vec, v_vec, mu)   # já [0,360)
-        nus_deg.append(nu)
-        incs_deg.append(get_inclination(r_vec, v_vec, mu))
-
-    return t, X, np.array(nus_deg), np.array(incs_deg), orbital_elementss
-
 # ---------- utilitário: plot i(nu) segmentado e com cor fixa ----------
 def plot_i_vs_nu_segmentado(nu_deg: np.ndarray, inc_deg: np.ndarray, *, ax=None,
                             color="black", **plot_kw):
@@ -253,6 +233,7 @@ ax.set_box_aspect([1, 1, 1])
 ax.set_title("Órbita simulada - Satélite V-only")
 ax.legend()
 ax.axis('equal')
+
 # ---------- plot i(nu) com cor única ----------
 fig2, ax2 = plt.subplots()
 plot_i_vs_nu_segmentado(nus_deg, incs_deg, ax=ax2, color="green", lw=1.5, label='i vs. nu')

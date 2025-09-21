@@ -7,7 +7,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-
+import matplotlib.patches as mpatches
 # seus módulos de simulação
 import sat_vh_up as sat_vh_up
 import sat_v_only as sat_v_only
@@ -149,6 +149,91 @@ def _plot_satellite_i_vs_nu_comparison(name, Nu_on, I_on, Nu_off, I_off, color="
     ax.set_title(f"{name}: Inclinação i(ν) — COM × SEM J2")
     ax.legend()
     plt.show()
+
+# ================= RAAN(t) dos 3 + janelas de empuxo H =================
+
+# --- helpers de janela (mesmos parâmetros usados nos módulos) ---
+THRUST_INTERVAL_DEG = 30.0
+MEAN_THETA_LIST_DEG = [180.0]   # centrado no apogeu
+
+def wrap_deg(a):  return np.remainder(a, 360.0)
+
+def angle_in_window_deg(theta_deg, center_deg, width_deg):
+    half = 0.5 * width_deg
+    lo = wrap_deg(center_deg - half)
+    hi = wrap_deg(center_deg + half)
+    th = wrap_deg(theta_deg)
+    return (th >= lo) & (th <= hi) if lo <= hi else ((th >= lo) | (th <= hi))
+
+def in_any_window(theta_deg):
+    return any(angle_in_window_deg(theta_deg, c, THRUST_INTERVAL_DEG)
+               for c in MEAN_THETA_LIST_DEG)
+
+def _unwrap_deg(a_deg):
+    return np.degrees(np.unwrap(np.radians(np.asarray(a_deg, float))))
+
+def _mask_to_spans(t, mask_bool):
+    t = np.asarray(t, float); mask = np.asarray(mask_bool, bool)
+    if mask.size == 0: return []
+    rises = np.where(np.diff(mask.astype(np.int8)) == +1)[0] + 1
+    falls = np.where(np.diff(mask.astype(np.int8)) == -1)[0] + 1
+    if mask[0]:  rises = np.r_[0, rises]
+    if mask[-1]: falls = np.r_[falls, mask.size-1]
+    return list(zip(t[rises], t[falls]))
+
+def add_thrust_spans(ax, t, mask_bool, *, color, alpha=0.15, label=None):
+    spans = _mask_to_spans(t, mask_bool)
+    for t0, t1 in spans:
+        ax.axvspan(t0, t1, color=color, alpha=alpha, lw=0)
+    if label:
+        handles, labels = ax.get_legend_handles_labels()
+        patch = mpatches.Patch(color=color, alpha=alpha, label=label)
+        if label not in labels:
+            ax.legend(handles + [patch], labels + [label])
+
+# --- RAAN séries (usa elems_* se já vieram, senão reconstroi) ---
+def _raan_series(t, X, elems, mu=3.986e5):
+    if elems is not None and len(elems) == X.shape[1]:
+        Om = np.array([e.ascending_node for e in elems], float)
+    else:
+        from utils.GetClassicOrbitalElements import get_orbital_elements
+        Om = np.empty(X.shape[1], float)
+        for k in range(X.shape[1]):
+            Om[k] = get_orbital_elements(X[0:3, k], X[3:6, k], mu).ascending_node
+    return _unwrap_deg(Om)
+
+# --- máscaras de empuxo H ligado (considera janela em ν e propelente disponível) ---
+m_dry = 15.0  # kg (ajuste se diferente nos módulos)
+mask_up   = (X_up[6, :]   > m_dry) & np.array([in_any_window(nu)   for nu in nus_up],   bool)
+mask_down = (X_down[6, :] > m_dry) & np.array([in_any_window(nu)   for nu in nus_down], bool)
+# V Only não tem H → máscara vazia
+mask_v = np.zeros_like(t_v, dtype=bool)
+
+# --- RAAN desenrolado de cada satélite ---
+Om_up_unw   = _raan_series(t_up,   X_up,   elems_up)
+Om_v_unw    = _raan_series(t_v,    X_v,    elems_v)
+Om_dn_unw   = _raan_series(t_down, X_down, elems_down)
+
+# --- plot único ---
+COL_UP, COL_V, COL_DN = "#1f77b4", "#2ca02c", "#d62728"
+t_up_d, t_v_d, t_dn_d = t_up/86400.0, t_v/86400.0, t_down/86400.0
+
+fig, ax = plt.subplots()
+ax.plot(t_up_d, Om_up_unw,   '-', color=COL_UP, lw=1.6, label="VH Up  — Ω (J2 ON)")
+ax.plot(t_v_d,  Om_v_unw,    '-', color=COL_V,  lw=1.6, label="V Only — Ω (J2 ON)")
+ax.plot(t_dn_d, Om_dn_unw,   '-', color=COL_DN, lw=1.6, label="VH Down — Ω (J2 ON)")
+
+# sombreia onde H está ligado (Up/Down)
+add_thrust_spans(ax, t_up_d,  mask_up,   color=COL_UP,  alpha=0.15, label="H ON (VH Up)")
+add_thrust_spans(ax, t_dn_d,  mask_down, color=COL_DN,  alpha=0.15, label="H ON (VH Down)")
+# (se quiser também desenhar bordas tracejadas, crie uma função axvline como antes)
+
+ax.set_xlabel("Tempo [dias]")
+ax.set_ylabel("RAAN, Ω [graus] (desenrolado)")
+ax.set_title("RAAN dos 3 satélites com janelas de empuxo H destacadas")
+ax.grid(True)
+ax.legend()
+plt.show()
 
 # ----------------- Simulações ON (como você já fazia) -----------------
 print("Simulando satélite VH UP...")

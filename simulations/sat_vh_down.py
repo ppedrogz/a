@@ -3,6 +3,8 @@ from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 from utils.GetClassicOrbitalElements import *
 from utils.visualization import plot_classic_orbital_elements
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 
 # ===================== condições iniciais =====================
 r = np.array([10016.34, -17012.52, 7899.28])
@@ -22,7 +24,7 @@ m_dry = 15.0       # kg
 from J2 import external_accel, EarthParams, PerturbationFlags
 
 # Flag de módulo para ligar/desligar J2 (não mexe no resto do código)
-_J2_ON = True
+_J2_ON = False
 
 def _accel_J2(r_vec, v_vec, t):
     if _J2_ON:
@@ -232,6 +234,53 @@ print(f"Δi_sim (último - inicial):  {delta_i_sim_deg[-1]:.9f}")
 
 # ---------- plot dos elementos (seu utilitário) ----------
 plot_classic_orbital_elements(t, orbital_elementss)
+
+# 1) máscara "empuxo H ON": janela em nu E massa > m_dry
+thr_H_on_mask = (m_series > m_dry) & np.array([in_any_window(nu) for nu in nus_deg], dtype=bool)
+
+# 2) utilitários para converter máscara em intervalos e sombrear no gráfico
+def _mask_to_spans(t, mask_bool):
+    t = np.asarray(t, float); mask = np.asarray(mask_bool, bool)
+    if mask.size == 0: return []
+    rises  = np.where(np.diff(mask.astype(np.int8)) == +1)[0] + 1
+    falls  = np.where(np.diff(mask.astype(np.int8)) == -1)[0] + 1
+    if mask[0]:  rises = np.r_[0, rises]
+    if mask[-1]: falls = np.r_[falls, mask.size-1]
+    return list(zip(t[rises], t[falls]))
+
+def add_thrust_spans(ax, t, mask_bool, *, color="tab:orange", alpha=0.15, label="Empuxo H ON"):
+    for t0, t1 in _mask_to_spans(t, mask_bool):
+        ax.axvspan(t0, t1, color=color, alpha=alpha, lw=0)
+    # handle de legenda (1 entrada só)
+    handles, labels = ax.get_legend_handles_labels()
+    patch = mpatches.Patch(color=color, alpha=alpha, label=label)
+    if label not in labels:
+        ax.legend(handles + [patch], labels + [label])
+
+# (opcional) só marcar as bordas com linhas tracejadas:
+def add_thrust_edges(ax, t, mask_bool, *, color="tab:orange", alpha=0.7):
+    idx_on = np.where(np.diff(mask_bool.astype(np.int8)) == +1)[0] + 1
+    for i in idx_on:
+        ax.axvline(t[i], color=color, ls="--", lw=0.8, alpha=alpha)
+
+# 3) exemplo: Ω(t) desenrolado com as faixas do empuxo H
+def _unwrap_deg(a_deg):
+    return np.degrees(np.unwrap(np.radians(np.asarray(a_deg, float))))
+
+Omega_series = [el.ascending_node for el in orbital_elementss]
+Omega_unw = _unwrap_deg(Omega_series)
+
+t_plot = t/86400.0  # se preferir em dias
+fig, ax = plt.subplots()
+ax.plot(t_plot, Omega_unw, 'r-', lw=1.2, label='Ω (desenrolado)')
+# sombreia quando H está ligado
+add_thrust_spans(ax, t_plot, thr_H_on_mask, color="tab:orange", alpha=0.18, label="Empuxo H ON")
+# (opcional) bordas:
+# add_thrust_edges(ax, t_plot, thr_H_on_mask)
+
+ax.set_xlabel("Tempo [dias]"); ax.set_ylabel("Ω [graus]")
+ax.set_title("RAAN com janelas de empuxo H destacadas")
+ax.grid(True); plt.show()
 
 # ---------- plot 3D ----------
 fig = plt.figure()
