@@ -18,6 +18,20 @@ g0  = 9.80665      # m/s^2
 m0  = 20.0         # kg
 m_dry = 15.0       # kg
 
+#adição da perturbação
+from perturbations import external_accel, EarthParams, PerturbationFlags
+
+# Flag de módulo para ligar/desligar J2 (não mexe no resto do código)
+_J2_ON = True
+
+def _accel_J2(r_vec, v_vec, t):
+    if _J2_ON:
+        return external_accel(r_vec, v_vec, t,
+                              params=EarthParams(),
+                              flags=PerturbationFlags(j2=True))
+    return 0.0 * r_vec  # vetor zero do mesmo shape
+
+
 #definição do inclinação para 97.5 do ITASAT
 def _R3(angle):
     c, s = np.cos(angle), np.sin(angle)
@@ -118,6 +132,9 @@ def x_dot(t, x):
 
     # Gravidade
     xdot[3:6] = -(mu/(rnorm**3))*r_vec
+
+ # === AQUI: somar J2 no ODE (depois que xdot existe) ===
+    xdot[3:6] += _accel_J2(r_vec, v_vec, t)# adiciona as perturbações
 
     # Base RSW
     r_hat = r_vec / rnorm

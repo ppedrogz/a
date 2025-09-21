@@ -22,6 +22,19 @@ m0    = 20.0   # kg
 m_dry = 15.0   # kg
 # ========================================================================
 
+
+#adição da perturbação
+from perturbations import external_accel, EarthParams, PerturbationFlags
+
+# Flag de módulo para ligar/desligar J2 (não mexe no resto do código)
+_J2_ON = True
+def _accel_J2(r_vec, v_vec, t):
+    if _J2_ON:
+        return external_accel(r_vec, v_vec, t,
+                              params=EarthParams(),
+                              flags=PerturbationFlags(j2=True))
+    return 0.0 * r_vec  # vetor zero do mesmo shape
+
 #definição do inclinação para 97.5 do ITASAT
 def _R3(angle):
     c, s = np.cos(angle), np.sin(angle)
@@ -108,6 +121,9 @@ def x_dot(t, x):
     rnorm = np.linalg.norm(r_vec) + 1e-32
     xdot[3:6] = -(mu/(rnorm**3))*r_vec
 
+ # === AQUI: somar J2 no ODE (depois que xdot existe) ===
+    xdot[3:6] += _accel_J2(r_vec, v_vec, t)# adiciona as perturbações
+
     # ---------- Propulsão só em V ----------
     m_cur = max(x[6], 1e-18)
     u = throttle(t, x)
@@ -167,6 +183,8 @@ delta_v_ms  = 1000.0 * delta_v_kms
 print("\n=== Dados V-only ===")
 print(f"Δv acumulado (m/s):        {delta_v_ms:.6f}")
 print(f"Δi sim (último - inicial): {incs_deg[-1] - incs_deg[0]:.9f}")
+
+
 
 def simulate():
     x0 = np.concatenate((r, v, [m0]))
