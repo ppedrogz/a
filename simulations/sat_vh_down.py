@@ -228,7 +228,7 @@ z_e = earth_radius * np.cos(v_grid)
 ax.plot_wireframe(x_e, y_e, z_e, color="g", alpha=0.3)
 
 # Trajetória
-ax.plot3D(X[0, :], X[1, :], X[2, :], 'b-', label="Satélite V_H DOWN")
+ax.plot3D(X[0, :], X[1, :], X[2, :], 'r', label="Satélite V_H DOWN")
 ax.set_box_aspect([1, 1, 1])
 ax.set_title("Órbita simulada - Satélite V_H DOWN")
 ax.legend()

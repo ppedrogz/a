@@ -229,7 +229,7 @@ z_e = earth_radius * np.cos(vgrid)
 ax.plot_wireframe(x_e, y_e, z_e, color="g", alpha=0.3)
 
 # Trajetória simulada (única)
-ax.plot3D(X[0, :], X[1, :], X[2, :], 'b-', label="Satélite V-only")
+ax.plot3D(X[0, :], X[1, :], X[2, :], 'g', label="Satélite V-only")
 
 ax.set_box_aspect([1, 1, 1])
 ax.set_title("Órbita simulada - Satélite V-only")
