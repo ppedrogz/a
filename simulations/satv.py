@@ -7,7 +7,7 @@ from utils.visualization import plot_classic_orbital_elements
 # ===================== condições iniciais =====================
 r = np.array([10016.34, -17012.52, 7899.28])
 v = np.array([2.5, -1.05, 3.88])
-t = np.linspace(0, 4_320_0000, 1_000_0000)  # 50 dias (ATENÇÃO: 4.320.000 s = 50 dias)
+t = np.linspace(0, 4320000, 1000000)  
 earth_radius = 6378.0  # km
 mu = 3.986e5
 thrust = 1.1e-3  # N (força fixa)
@@ -21,6 +21,16 @@ m_sat = 20.0     # kg
 m0    = 20.0     # kg
 m_dry = 15.0     # kg
 # ========================================================================
+
+# ===== Controle de tolerâncias (precisão do integrador) =====
+# Ex.: ERROR_PERCENT = 0.001 -> rtol = 1e-5 (0,001%)
+ERROR_PERCENT = 0.001
+RTOL = ERROR_PERCENT / 100.0
+ATOL = np.array([
+    1e-3, 1e-3, 1e-3,   # posição [km] (1e-3 km = 1 m)
+    1e-6, 1e-6, 1e-6,   # velocidade [km/s] (1e-6 km/s = 1 mm/s)
+    1e-8                # massa [kg]
+], dtype=float)
 
 # adição da perturbação (J2)
 from J2 import external_accel, EarthParams, PerturbationFlags
@@ -116,10 +126,11 @@ def x_dot(tcur, x):
 x0 = np.concatenate((r, v, [m0]))
 
 # ===================== Integração COM solução densa =====================
-# Avaliaremos a solução exatamente na sua grade 't'
-sol = solve_ivp(x_dot, (t[0], t[-1]), x0,
-                method='RK45', rtol=1e-9, atol=1e-12,
-                dense_output=True)
+sol = solve_ivp(
+    x_dot, (t[0], t[-1]), x0,
+    method='RK45', rtol=RTOL, atol=ATOL,
+    dense_output=True
+)
 
 # estados amostrados na SUA grade:
 X = sol.sol(t)          # shape (7, len(t))
@@ -205,17 +216,19 @@ def simulate():
       - orbital_elementss: lista de OrbitalElements por amostra
     """
     x0 = np.concatenate((r, v, [m0]))
-    sol = solve_ivp(x_dot, (t[0], t[-1]), x0,
-                    method='RK45', rtol=1e-9, atol=1e-12,
-                    dense_output=True)
-    X = sol.sol(t)
-    orbital_elementss = []
-    nus_deg = []
-    incs_deg = []
-    for k in range(X.shape[1]):
-        r_vec = X[0:3, k]
-        v_vec = X[3:6, k]
-        orbital_elementss.append(get_orbital_elements(r_vec, v_vec, mu))
-        nus_deg.append(get_true_anormaly(r_vec, v_vec, mu))
-        incs_deg.append(get_inclination(r_vec, v_vec, mu))
-    return t, X, np.array(nus_deg, dtype=float), np.array(incs_deg, dtype=float), orbital_elementss
+    sol = solve_ivp(
+        x_dot, (t[0], t[-1]), x0,
+        method='RK45', rtol=RTOL, atol=ATOL,
+        dense_output=True
+    )
+    X_ = sol.sol(t)
+    orbital_elementss_ = []
+    nus_deg_ = []
+    incs_deg_ = []
+    for k in range(X_.shape[1]):
+        r_vec = X_[0:3, k]
+        v_vec = X_[3:6, k]
+        orbital_elementss_.append(get_orbital_elements(r_vec, v_vec, mu))
+        nus_deg_.append(get_true_anormaly(r_vec, v_vec, mu))
+        incs_deg_.append(get_inclination(r_vec, v_vec, mu))
+    return t, X_, np.array(nus_deg_, dtype=float), np.array(incs_deg_, dtype=float), orbital_elementss_

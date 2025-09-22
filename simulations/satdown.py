@@ -20,7 +20,7 @@ m0  = 20.0         # kg
 m_dry = 15.0       # kg
 
 # ===== Controle de tolerâncias (porcentagem de erro) =====
-ERROR_PERCENT = 2.0                 # << ajuste aqui (%, p.ex. 1.0 = 1%)
+ERROR_PERCENT = 0.001                # << ajuste aqui (%, p.ex. 1.0 = 1%)
 RTOL = ERROR_PERCENT / 100.0        # erro relativo alvo
 # ATOL por estado [x,y,z,vx,vy,vz,m] — ajuste às suas unidades/escala:
 ATOL = np.array([1e-3, 1e-3, 1e-3,   # posição em km (1e-3 km = 1 m)

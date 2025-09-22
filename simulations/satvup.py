@@ -20,7 +20,7 @@ m0  = 20.0         # kg
 m_dry = 15.0       # kg
 
 # ===== Controle de tolerâncias (porcentagem de erro) =====
-ERROR_PERCENT = 0.9               # << ajuste aqui (%, p.ex. 1.0 = 1%)
+ERROR_PERCENT = 0.001              # << ajuste aqui (%, p.ex. 1.0 = 1%)
 RTOL = ERROR_PERCENT / 100.0        # erro relativo alvo
 # ATOL por estado [x,y,z,vx,vy,vz,m] — ajuste às suas unidades/escala:
 ATOL = np.array([1e-3, 1e-3, 1e-3,   # posição em km (1e-3 km = 1 m)
@@ -165,7 +165,7 @@ def x_dot(tnow, x):
     else:
         aV = (T_V / m_cur) / 1000.0
         aH = (T_H / m_cur) / 1000.0 if fire_H else 0.0
-        SIGN_H = -1.0  # DOWN
+        SIGN_H = +1.0  # DOWN
         if u > 0.0:
             xdot[3:6] += aV * s_hat + SIGN_H * aH * w_hat
             mdot_V = T_V/(Isp_V*g0)

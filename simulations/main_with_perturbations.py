@@ -151,7 +151,24 @@ def _plot_satellite_i_vs_nu_comparison(name, Nu_on, I_on, Nu_off, I_off, color="
     plt.show()
 
 # ================= RAAN(t) dos 3 + janelas de empuxo H =================
+# ----------------- Simulações ON (como você já fazia) -----------------
+print("Simulando satélite VH UP...")
+res_up = sat_vh_up.simulate()  # padrão j2=True dentro do módulo
 
+print("Simulando satélite V ONLY...")
+res_v = sat_v_only.simulate()
+
+print("Simulando satélite VH DOWN...")
+res_down = sat_vh_down.simulate()
+
+t_up, X_up, nus_up, incs_up, elems_up = res_up
+t_v, X_v, nus_v, incs_v, elems_v = res_v
+t_down, X_down, nus_down, incs_down, elems_down = res_down
+
+# (opcional) reexecuta para garantir dados frescos para os plots comparativos
+t_up, X_up, nus_up, incs_up, elems_up = sat_vh_up.simulate()
+t_v, X_v, nus_v, incs_v, elems_v = sat_v_only.simulate()
+t_down, X_down, nus_down, incs_down, elems_down = sat_vh_down.simulate()
 # --- helpers de janela (mesmos parâmetros usados nos módulos) ---
 THRUST_INTERVAL_DEG = 30.0
 MEAN_THETA_LIST_DEG = [180.0]   # centrado no apogeu
@@ -235,24 +252,6 @@ ax.grid(True)
 ax.legend()
 plt.show()
 
-# ----------------- Simulações ON (como você já fazia) -----------------
-print("Simulando satélite VH UP...")
-res_up = sat_vh_up.simulate()  # padrão j2=True dentro do módulo
-
-print("Simulando satélite V ONLY...")
-res_v = sat_v_only.simulate()
-
-print("Simulando satélite VH DOWN...")
-res_down = sat_vh_down.simulate()
-
-t_up, X_up, nus_up, incs_up, elems_up = res_up
-t_v, X_v, nus_v, incs_v, elems_v = res_v
-t_down, X_down, nus_down, incs_down, elems_down = res_down
-
-# (opcional) reexecuta para garantir dados frescos para os plots comparativos
-t_up, X_up, nus_up, incs_up, elems_up = sat_vh_up.simulate()
-t_v, X_v, nus_v, incs_v, elems_v = sat_v_only.simulate()
-t_down, X_down, nus_down, incs_down, elems_down = sat_vh_down.simulate()
 
 # ----------------- Diagnósticos (J2 ON) -----------------
 P = EarthParams()  # (mu, Re, J2)

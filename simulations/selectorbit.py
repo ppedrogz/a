@@ -1,10 +1,12 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+#import satvup as sat_vh_up
+#import satv as sat_v_only
+#import satdown as sat_vh_down
 import sat_vh_up as sat_vh_up
 import sat_v_only as sat_v_only
 import sat_vh_down as sat_vh_down
-
 # Configuração: "first" para primeira órbita, "last" para última órbita
 
 mu = 3.986e5  # km^3/s^2
