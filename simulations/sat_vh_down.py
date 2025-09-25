@@ -8,7 +8,7 @@ import matplotlib.patches as mpatches
 # ===================== condições iniciais =====================
 r = np.array([10016.34, -17012.52, 7899.28])
 v = np.array([2.5, -1.05, 3.88])
-t = np.linspace(0, 4320000, 1000000)  # 5 dias, 100k pontos
+t = np.linspace(0, 432000, 100000)  # 5 dias, 100k pontos
 earth_radius = 6378.0  # km
 mu = 3.986e5
 
@@ -285,7 +285,7 @@ arg = np.clip((dv_H_kms) / (2.0 * v_ref), -1.0, 1.0)  # dv_H_kms está em km/s
 delta_i_ideal_deg = float(np.degrees(2.0*np.arcsin(arg)))
 delta_i_sim_deg = incs_deg - incs_deg[0]
 
-print("\n=== Dados V H UP ===")
+print("\n=== Dados V H DOWN ===")
 print(f"Tempo com H ligado (s):     {t_H_on:.6f}")
 print(f"Δv_V     (m/s):             {dv_V_ms:.6f}")
 print(f"Δv_H     (m/s):             {dv_H_ms:.6f}")
@@ -346,9 +346,9 @@ x_e = earth_radius * np.cos(u_grid) * np.sin(v_grid)
 y_e = earth_radius * np.sin(u_grid) * np.sin(v_grid)
 z_e = earth_radius * np.cos(v_grid)
 ax.plot_wireframe(x_e, y_e, z_e, color="g", alpha=0.3)
-ax.plot3D(X[0, :], X[1, :], X[2, :], 'r', label="Satélite V_H UP")
+ax.plot3D(X[0, :], X[1, :], X[2, :], 'r', label="Satélite V_H DOWN")
 ax.set_box_aspect([1, 1, 1])
-ax.set_title("Órbita simulada - Satélite V_H UP")
+ax.set_title("Órbita simulada - Satélite V_H DOWN")
 ax.legend()
 ax.axis('equal')
 

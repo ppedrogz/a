@@ -8,7 +8,7 @@ import matplotlib.patches as mpatches
 # ===================== condições iniciais =====================
 r = np.array([10016.34, -17012.52, 7899.28])
 v = np.array([2.5, -1.05, 3.88])
-t = np.linspace(0, 4320000, 1000000)  # 5 dias, 100k pontos
+t = np.linspace(0, 432000, 100000)  # 5 dias, 100k pontos
 earth_radius = 6378.0  # km
 mu = 3.986e5
 

@@ -5,9 +5,7 @@ import numpy as np
 import sat_vh_up as sat_vh_up
 import sat_v_only as sat_v_only
 import sat_vh_down as sat_vh_down
-#import satvup as sat_vh_up
-#import satv as sat_v_only            #utilizar esses para colocar erro percentual (simulações mais longas)
-#import satdown as sat_vh_down
+
 # ----------------- helper: plot i(nu) segmentado, cor fixa -----------------
 def plot_i_vs_nu_segmentado(nu_deg: np.ndarray, inc_deg: np.ndarray, *,
                             ax=None, color="black", label=None, **plot_kw):
