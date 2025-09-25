@@ -55,21 +55,13 @@ def get_inclination(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> fl
     return i
 
 
-def get_ascending_node(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
+def get_ascending_node(r, v, mu):
     h = np.cross(r, v)
     n = np.cross(Bases.k, h)
-
-    if np.linalg.norm(n) > 1e-10:
-        Omega_rad = np.acos(np.dot(Bases.i, n)/np.linalg.norm(n))
-        if n[1] < 0:
-            Omega_rad = 2*np.pi - Omega_rad
-    else:
-        Omega_rad = 0
-
-    Omega = np.rad2deg(Omega_rad)
-
-    return Omega
-
+    n_norm = np.linalg.norm(n)
+    if n_norm < 1e-12:
+        return 0.0   # equatorial → indefinido
+    return float(np.degrees(np.arctan2(n[1], n[0])) % 360.0)
 
 def get_argument_of_perigee(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
     e_vec = get_eccentricity_vector(r, v, mu)

@@ -6,8 +6,11 @@ from utils.visualization import plot_classic_orbital_elements
 import matplotlib.patches as mpatches
 
 # ===================== condições iniciais =====================
-r = np.array([10016.34, -17012.52, 7899.28])
-v = np.array([2.5, -1.05, 3.88])
+r = np.array([6890.3, 0, 0]) #parametro da ITASAT 1
+v = np.array([0, -0.992,7.535])
+
+#r = np.array([10016.34, -17012.52, 7899.28]) parametros orbitais iniciais
+#v = np.array([2.5, -1.05, 3.88])
 t = np.linspace(0, 432000, 100000)  # 50 dias, 1e6 pontos (como você mandou)
 earth_radius = 6378.0  # km
 mu = 3.986e5

@@ -5,8 +5,11 @@ from utils.GetClassicOrbitalElements import *
 from utils.visualization import plot_classic_orbital_elements
 
 # ===================== condições iniciais =====================
-r = np.array([10016.34, -17012.52, 7899.28])
-v = np.array([2.5, -1.05, 3.88])
+r = np.array([6890.3, 0, 0]) #parametro da ITASAT 1
+v = np.array([0, -0.992,7.535])
+
+#r = np.array([10016.34, -17012.52, 7899.28]) parametros orbitais iniciais
+#v = np.array([2.5, -1.05, 3.88])
 t = np.linspace(0, 432000, 100000)  # 5 dias
 earth_radius = 6378.0  # km
 mu = 3.986e5
@@ -288,8 +291,11 @@ def simulate():
     """
     # estado inicial inclui massa
     x0 = np.concatenate((r, v, [m0]))
-
-    sol = solve_ivp(x_dot, (t[0], t[-1]), x0, t_eval=t, method='RK45')
+    sol = solve_ivp(
+    x_dot, (t[0], t[-1]), x0, t_eval=t,
+    method="DOP853",       # ou "Radau" (implícito) se preferir
+    rtol=1e-12, atol=1e-15,
+    )
     X = sol.y
 
     orbital_elementss = []
