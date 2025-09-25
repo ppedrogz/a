@@ -397,4 +397,4 @@ def simulate():
         nus_deg.append(nu)
         incs_deg.append(get_inclination(r_vec, v_vec, mu))
 
-    return t, X, np.array(nus_deg, dtype=float), np.array(incs_deg, dtype=float), orbital_elementss
+    return sol.t, X, np.array(nus_deg, float), np.array(incs_deg, float), orbital_elementss

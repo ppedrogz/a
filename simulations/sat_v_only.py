@@ -310,7 +310,7 @@ def simulate():
         # inclinação em graus
         incs_deg.append(get_inclination(r_vec, v_vec, mu))
 
-    return t, X, np.array(nus_deg, dtype=float), np.array(incs_deg, dtype=float), orbital_elementss
+    return sol.t, X, np.array(nus_deg, float), np.array(incs_deg, float), orbital_elementss
 def specific_energy(r, v, mu):
     return 0.5*np.dot(v, v) - mu/np.linalg.norm(r)
 
