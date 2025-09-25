@@ -24,7 +24,7 @@ m_dry = 15.0       # kg
 # from simulations.perturbations import external_accel, EarthParams, PerturbationFlags
 from J2 import external_accel, EarthParams, PerturbationFlags
 
-_J2_ON = True  # liga/desliga J2
+_J2_ON = False  # liga/desliga J2
 
 def _accel_J2(r_vec, v_vec, t):
     if _J2_ON:
@@ -32,6 +32,16 @@ def _accel_J2(r_vec, v_vec, t):
                               params=EarthParams(),
                               flags=PerturbationFlags(j2=True))
     return 0.0 * r_vec
+
+#Adicionar arrasto atmosférico
+from Drag import accel_drag, DragParams
+_DRAG_ON = True
+_DRAG = DragParams(Cd=2.2, A_ref_m2=0.02, use_atmo_rotation=True,
+                   rho0_kg_m3=3.614e-11, h0_km=200.0, H_km=50.0)
+
+def _accel_DRAG(r_vec, v_vec, m_cur):
+    return accel_drag(r_vec, v_vec, m_cur, _DRAG) if _DRAG_ON else 0.0 * r_vec
+
 
 # ===================== helpers gerais =====================
 def _R3(angle):
@@ -132,6 +142,10 @@ def x_dot(t, x):
 
     # Perturbação J2 (opcional)
     xdot[3:6] += _accel_J2(r_vec, v_vec, t)
+
+    # Perturbação arrasto atmosférico
+    m_cur = max(x[6], 1e-18)
+    xdot[3:6] += _accel_DRAG(r_vec, v_vec, m_cur)
 
     # Base RSW
     r_hat = r_vec / rnorm

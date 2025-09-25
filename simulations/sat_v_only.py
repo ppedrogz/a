@@ -26,7 +26,7 @@ m_dry = 15.0   # kg
 from J2 import external_accel, EarthParams, PerturbationFlags
 
 # Flag de módulo para ligar/desligar J2 (não mexe no resto do código)
-_J2_ON = True
+_J2_ON = False
 
 def _accel_J2(r_vec, v_vec, t):
     if _J2_ON:
@@ -34,6 +34,15 @@ def _accel_J2(r_vec, v_vec, t):
                               params=EarthParams(),
                               flags=PerturbationFlags(j2=True))
     return 0.0 * r_vec  # vetor zero do mesmo shape
+
+#Perturbação de arrasto atmosferico
+from Drag import accel_drag, DragParams
+_DRAG_ON = True
+_DRAG = DragParams(Cd=2.2, A_ref_m2=0.02, use_atmo_rotation=True,
+                   rho0_kg_m3=3.614e-11, h0_km=200.0, H_km=50.0)
+def _accel_DRAG(r_vec, v_vec, m_cur):
+    return accel_drag(r_vec, v_vec, m_cur, _DRAG) if _DRAG_ON else 0.0 * r_vec
+
 
 # definição do inclinação para 97.5 do ITASAT
 def _R3(angle):
@@ -88,7 +97,7 @@ print(f"[check] i0 = {get_inclination(r, v, mu):.6f} deg")
 
 # ===================== Janelas em anomalia verdadeira (não usado aqui) =====================
 THRUST_INTERVAL_DEG = 30.0
-MEAN_THETA_LIST_DEG = [0] #180 apogeu - 0
+MEAN_THETA_LIST_DEG = [180] #180 apogeu - 0
 
 def throttle(t, x):
     return 1.0 if x[6] > m_dry else 0.0
@@ -121,8 +130,12 @@ def x_dot(t, x):
     rnorm = np.linalg.norm(r_vec) + 1e-32
     xdot[3:6] = -(mu/(rnorm**3))*r_vec
 
-    # ---------- J2 ----------
-    xdot[3:6] += _accel_J2(r_vec, v_vec, t)   # <--- ADIÇÃO
+      # ---------- J2 ----------
+    xdot[3:6] += _accel_J2(r_vec, v_vec, t)
+
+    # ----------Arrasto------------
+    m_cur = max(x[6], 1e-18)
+    xdot[3:6] += _accel_DRAG(r_vec, v_vec, m_cur)
 
     # ---------- Propulsão só em V ----------
     m_cur = max(x[6], 1e-18)
