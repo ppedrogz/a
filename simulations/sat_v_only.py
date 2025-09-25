@@ -7,7 +7,7 @@ from utils.visualization import plot_classic_orbital_elements
 # ===================== condições iniciais =====================
 r = np.array([10016.34, -17012.52, 7899.28])
 v = np.array([2.5, -1.05, 3.88])
-t = np.linspace(0, 432000, 100000)  # 5 dias
+t = np.linspace(0, 4320000, 1000000)  # 5 dias
 earth_radius = 6378.0  # km
 mu = 3.986e5
 thrust = 1.1e-3 # N (força fixa)
@@ -37,7 +37,7 @@ def _accel_J2(r_vec, v_vec, t):
 
 #Perturbação de arrasto atmosferico
 from Drag import accel_drag, DragParams
-_DRAG_ON = True
+_DRAG_ON = False
 _DRAG = DragParams(Cd=2.2, A_ref_m2=0.02, use_atmo_rotation=True,
                    rho0_kg_m3=3.614e-11, h0_km=200.0, H_km=50.0)
 def _accel_DRAG(r_vec, v_vec, m_cur):
@@ -100,7 +100,12 @@ THRUST_INTERVAL_DEG = 30.0
 MEAN_THETA_LIST_DEG = [180] #180 apogeu - 0
 
 def throttle(t, x):
-    return 1.0 if x[6] > m_dry else 0.0
+    # Se não há empuxo, nunca liga
+    if T <= 0.0:
+        return 0.0
+    else:
+        return 1.0 if x[6] > m_dry else 0.0
+
 
 def wrap_deg(a):
     return np.remainder(a, 360.0)
@@ -161,7 +166,11 @@ def x_dot(t, x):
 # >>> Estado inicial inclui massa <<<
 x0 = np.concatenate((r, v, [m0]))
 
-sol = solve_ivp(x_dot, (t[0], t[-1]), x0, t_eval=t, method='RK45')  # , max_step=30.0
+sol = solve_ivp(
+    x_dot, (t[0], t[-1]), x0, t_eval=t,
+    method="DOP853",       # ou "Radau" (implícito) se preferir
+    rtol=1e-12, atol=1e-15,
+)
 X = sol.y
 
 # ---------- elementos, ν (0–360) e i ----------
@@ -184,7 +193,7 @@ incs_deg = np.array(incs_deg, dtype=float)
 
 # ---------- Δv numérico ----------
 # ---------- Δv acumulado (componentes) ----------
-tt = t
+tt = sol.t
 m_series = X[6, :]
 dt = np.diff(tt)
 
@@ -302,3 +311,22 @@ def simulate():
         incs_deg.append(get_inclination(r_vec, v_vec, mu))
 
     return t, X, np.array(nus_deg, dtype=float), np.array(incs_deg, dtype=float), orbital_elementss
+def specific_energy(r, v, mu):
+    return 0.5*np.dot(v, v) - mu/np.linalg.norm(r)
+
+def a_from_energy(r, v, mu):
+    E = specific_energy(r, v, mu)
+    return -mu/(2.0*E)
+
+def a_from_pe(r, v, mu):
+    h = np.linalg.norm(np.cross(r, v))
+    e = np.linalg.norm((np.cross(v, np.cross(r, v))/mu) - r/np.linalg.norm(r))
+    p = h*h/mu
+    return p/(1.0 - e*e)
+
+a_E  = np.array([a_from_energy(X[0:3,k], X[3:6,k], mu) for k in range(X.shape[1])])
+a_pe = np.array([a_from_pe    (X[0:3,k], X[3:6,k], mu) for k in range(X.shape[1])])
+
+print("drift(a_E)  [km] =", a_E.max()-a_E.min())
+print("drift(a_pe) [km] =", a_pe.max()-a_pe.min())
+print("max |a_E - a_pe| [m] =", 1000*np.max(np.abs(a_E-a_pe)))

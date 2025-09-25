@@ -99,7 +99,11 @@ def _two_body_propagate(x0, t, mu):
         if _has_mass:
             dx[6] = 0.0
         return dx
-    sol = solve_ivp(f, (t[0], t[-1]), x0, t_eval=t, method='RK45')
+    sol = solve_ivp(
+    x_dot, (t[0], t[-1]), x0, t_eval=t,
+    method="DOP853",       # ou "Radau" (implícito) se preferir
+    rtol=1e-12, atol=1e-15,
+)
     return sol.y
 
 def _sync_series(t_ref, t_src, arr_src):

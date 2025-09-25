@@ -27,19 +27,24 @@ def get_orbital_elements(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) 
 
 
 def get_major_axis(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
+    # energia específica: ε = v^2/2 - μ/r  (kepleriano)
     r_norm = np.linalg.norm(r)
-    v_norm = np.linalg.norm(v)
-    eps = (v_norm**2)/2 - (mu/r_norm)
-    a = -mu/(2*eps)
-
-    return a
-
+    v2 = float(np.dot(v, v))
+    eps = 0.5*v2 - (mu / r_norm)
+    # a = - μ / (2 ε)   (para ε<0; se ε≈0, parabólico → trate separadamente se quiser)
+    return -mu / (2.0*eps)
 
 def get_eccentricity(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
-    e = get_eccentricity_vector(r, v, mu)
-    e_norm = np.linalg.norm(e)
+    # forma invariante: e = sqrt(1 + (2 ε h^2)/μ^2)
+    h_vec = np.cross(r, v)
+    h2 = float(np.dot(h_vec, h_vec))
+    r_norm = np.linalg.norm(r)
+    v2 = float(np.dot(v, v))
+    eps = 0.5*v2 - (mu / r_norm)
+    val = 1.0 + (2.0*eps*h2)/(mu*mu)
+    # proteção numérica contra ruído (evita e>1+1e-12 por arredondamento)
+    return float(np.sqrt(max(val, 0.0)))
 
-    return e_norm
 
 
 def get_inclination(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
