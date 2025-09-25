@@ -202,36 +202,91 @@ nus_deg = np.array(nus_deg)
 incs_deg = np.array(incs_deg)
 
 # ---------- métricas ----------
+# ===================== MÉTRICAS (Δv, v_peri/apo, etc.) =====================
 tt = t
+m_series = X[6, :]
+dt = np.diff(tt)
+
+# Normas de r e v para métricas de velocidade
 r_norm_series = np.linalg.norm(X[0:3, :].T, axis=1)
 v_norm_series = np.linalg.norm(X[3:6, :].T, axis=1)
-m_series = X[6, :]
 
-fire_mask = np.array([in_any_window(nu) for nu in nus_deg], dtype=bool)
-u_mask = (m_series > m_dry)
+# Máscaras
+fire_mask = np.array([in_any_window(nu) for nu in nus_deg], dtype=bool)  # H só em janelas
+u_mask    = (m_series > m_dry)                                           # tem propelente
 
-dt = np.diff(tt)
+# Acelerações instantâneas (km/s^2)
 aV_series = (T_V / np.maximum(m_series, 1e-18)) / 1000.0
 aH_series = (T_H / np.maximum(m_series, 1e-18)) / 1000.0
 
-delta_v_H_kms = float(np.sum(aH_series[:-1] * dt * (fire_mask[:-1] & u_mask[:-1])))
-delta_v_H_ms  = 1000.0 * delta_v_H_kms
-t_H_on = float(np.sum(dt * fire_mask[:-1]))
+# Δv (km/s) → integrações
+dv_V_kms = float(np.sum(aV_series[:-1] * dt * u_mask[:-1]))
+dv_H_kms = float(np.sum(aH_series[:-1] * dt * (fire_mask[:-1] & u_mask[:-1])))
 
-if np.any(fire_mask):
-    v_center = float(np.mean(v_norm_series[fire_mask]))
+# Conversões p/ m/s
+dv_V_ms = 1000.0 * dv_V_kms
+dv_H_ms = 1000.0 * dv_H_kms
+dv_total_ms = dv_V_ms + dv_H_ms
+
+# tempo com H ligado (s)
+t_H_on = float(np.sum(dt * (fire_mask[:-1])))
+
+# -------- v no perigeu/apogeu --------
+def peri_apo_speeds_from_elements(a: float, e: float, mu: float) -> tuple[float, float]:
+    a = float(a); e = float(e)
+    vp = np.sqrt(mu * (1.0 + e) / (a * (1.0 - e + 1e-32)))
+    va = np.sqrt(mu * (1.0 - e) / (a * (1.0 + e + 1e-32)))
+    return vp, va
+
+def ang_wrap_deg(x):
+    return (np.asarray(x, dtype=float) + 180.0) % 360.0 - 180.0
+
+def mask_near_angle(nu_deg: np.ndarray, center_deg: float, half_width_deg: float) -> np.ndarray:
+    return np.abs(ang_wrap_deg(nu_deg - center_deg)) <= half_width_deg
+
+a_series = np.array([el.major_axis for el in orbital_elementss], dtype=float)
+e_series = np.array([el.eccentricity for el in orbital_elementss], dtype=float)
+
+vp0, va0 = peri_apo_speeds_from_elements(a_series[0],  e_series[0],  mu)
+vpF, vaF = peri_apo_speeds_from_elements(a_series[-1], e_series[-1], mu)
+
+PERI_HALF_WIDTH = 1.0
+APO_HALF_WIDTH  = 1.0
+peri_mask = mask_near_angle(nus_deg, 0.0,   PERI_HALF_WIDTH)
+apo_mask  = mask_near_angle(nus_deg, 180.0, APO_HALF_WIDTH)
+
+if np.any(peri_mask):
+    v_peri_meas = float(np.mean(v_norm_series[peri_mask]))
 else:
-    v_center = float(np.min(v_norm_series))  # fallback
+    v_peri_meas = float(np.max(v_norm_series))
 
-arg = np.clip(delta_v_H_kms/(2.0*v_center), -1.0, 1.0)
+if np.any(apo_mask):
+    v_apo_meas = float(np.mean(v_norm_series[apo_mask]))
+else:
+    v_apo_meas = float(np.min(v_norm_series))
+
+# ---------- Relatórios ----------
+# Usa v_apogeu se a janela é centrada em 180°, senão v_perigeu
+v_ref = v_apo_meas if 180.0 in MEAN_THETA_LIST_DEG else v_peri_meas
+arg = np.clip((dv_H_kms) / (2.0 * v_ref), -1.0, 1.0)  # dv_H_kms está em km/s
 delta_i_ideal_deg = float(np.degrees(2.0*np.arcsin(arg)))
 delta_i_sim_deg = incs_deg - incs_deg[0]
 
-print("\n=== Dados V H Down ===")
+print("\n=== Dados V H UP ===")
 print(f"Tempo com H ligado (s):     {t_H_on:.6f}")
-print(f"Δv_H acumulado (m/s):       {delta_v_H_ms:.6f}")
+print(f"Δv_V     (m/s):             {dv_V_ms:.6f}")
+print(f"Δv_H     (m/s):             {dv_H_ms:.6f}")
+print(f"Δv_total (m/s):             {dv_total_ms:.6f}")
 print(f"Δi_ideal (graus):           {delta_i_ideal_deg:.9f}")
 print(f"Δi_sim (último - inicial):  {delta_i_sim_deg[-1]:.9f}")
+
+if 0.0 in MEAN_THETA_LIST_DEG:
+    print(f"→ Janela centrada no PERIGEU: usar v ≈ {v_peri_meas:.9f} km/s (medido) "
+          f"ou {vpF:.9f} km/s (teórico no fim).")
+if 180.0 in MEAN_THETA_LIST_DEG:
+    print(f"→ Janela centrada no APOGEU: usar v ≈ {v_apo_meas:.9f} km/s (medido) "
+          f"ou {vaF:.9f} km/s (teórico no fim).")
+
 
 # ---------- plot dos elementos ----------
 plot_classic_orbital_elements(t, orbital_elementss)
