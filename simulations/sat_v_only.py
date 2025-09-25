@@ -26,7 +26,7 @@ m_dry = 15.0   # kg
 from J2 import external_accel, EarthParams, PerturbationFlags
 
 # Flag de módulo para ligar/desligar J2 (não mexe no resto do código)
-_J2_ON = False
+_J2_ON = True
 
 def _accel_J2(r_vec, v_vec, t):
     if _J2_ON:
@@ -88,7 +88,7 @@ print(f"[check] i0 = {get_inclination(r, v, mu):.6f} deg")
 
 # ===================== Janelas em anomalia verdadeira (não usado aqui) =====================
 THRUST_INTERVAL_DEG = 30.0
-MEAN_THETA_LIST_DEG = [180.0]
+MEAN_THETA_LIST_DEG = [0] #180 apogeu - 0
 
 def throttle(t, x):
     return 1.0 if x[6] > m_dry else 0.0
@@ -170,19 +170,31 @@ nus_deg = np.array(nus_deg, dtype=float)
 incs_deg = np.array(incs_deg, dtype=float)
 
 # ---------- Δv numérico ----------
+# ---------- Δv acumulado (componentes) ----------
 tt = t
-r_norm_series = np.linalg.norm(X[0:3, :].T, axis=1)
-v_norm_series = np.linalg.norm(X[3:6, :].T, axis=1)
-m_series      = X[6, :]
-
+m_series = X[6, :]
 dt = np.diff(tt)
-a_inst_series = (T / np.maximum(m_series, 1e-18)) / 1000.0
-delta_v_kms = float(np.sum(a_inst_series[:-1] * dt * (m_series[:-1] > m_dry)))
-delta_v_ms  = 1000.0 * delta_v_kms
 
-print("\n=== Dados V-only ===")
-print(f"Δv acumulado (m/s):        {delta_v_ms:.6f}")
-print(f"Δi sim (último - inicial): {incs_deg[-1] - incs_deg[0]:.9f}")
+# Aceleração em V (sempre along-track)
+aV_series = (T / np.maximum(m_series, 1e-18)) / 1000.0  # km/s^2
+
+# Mascara "tem propelente"
+u_mask = (m_series > m_dry)
+
+# Integrações (somas de Riemann) → km/s
+dv_V_kms = float(np.sum(aV_series[:-1] * dt * u_mask[:-1]))
+dv_H_kms = 0.0  # não há motor H no V-only
+
+# Converte para m/s
+dv_V_ms = 1000.0 * dv_V_kms
+dv_H_ms = 0.0
+dv_total_ms = dv_V_ms + dv_H_ms
+
+print("\n=== Δv acumulado (V-only) ===")
+print(f"Δv_V     (m/s): {dv_V_ms:.6f}")
+print(f"Δv_H     (m/s): {dv_H_ms:.6f}")
+print(f"Δv_total (m/s): {dv_total_ms:.6f}")
+
 
 # ---------- utilitário: plot i(nu) segmentado e com cor fixa ----------
 def plot_i_vs_nu_segmentado(nu_deg: np.ndarray, inc_deg: np.ndarray, *, ax=None,

@@ -3,7 +3,6 @@ from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 from utils.GetClassicOrbitalElements import *
 from utils.visualization import plot_classic_orbital_elements
-import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 # ===================== condições iniciais =====================
@@ -14,27 +13,27 @@ earth_radius = 6378.0  # km
 mu = 3.986e5
 
 # ===================== Dados de propulsão =====================
-T   = 1.1e-3         # N
+T   = 1.1e-3       # N
 Isp = 2150.0       # s
 g0  = 9.80665      # m/s^2
 m0  = 20.0         # kg
 m_dry = 15.0       # kg
 
-#adição da perturbação
+# ===================== Perturbações (J2 hook) =====================
+# Se seu módulo é simulations/perturbations.py, troque este import:
+# from simulations.perturbations import external_accel, EarthParams, PerturbationFlags
 from J2 import external_accel, EarthParams, PerturbationFlags
 
-# Flag de módulo para ligar/desligar J2 (não mexe no resto do código)
-_J2_ON = False
+_J2_ON = False  # liga/desliga J2
 
 def _accel_J2(r_vec, v_vec, t):
     if _J2_ON:
         return external_accel(r_vec, v_vec, t,
                               params=EarthParams(),
                               flags=PerturbationFlags(j2=True))
-    return 0.0 * r_vec  # vetor zero do mesmo shape
+    return 0.0 * r_vec
 
-
-#definição do inclinação para 97.5 do ITASAT
+# ===================== helpers gerais =====================
 def _R3(angle):
     c, s = np.cos(angle), np.sin(angle)
     return np.array([[ c, -s, 0.0],
@@ -50,7 +49,7 @@ def _R1(angle):
 def _coe_to_rv(a, e, i_deg, raan_deg, argp_deg, nu_deg, mu):
     i  = np.deg2rad(i_deg)
     O  = np.deg2rad(raan_deg)   # RAAN (Ω)
-    w  = np.deg2rad(argp_deg)   # argumento do perigeu (ω)
+    w  = np.deg2rad(argp_deg)   # perigeu (ω)
     nu = np.deg2rad(nu_deg)     # anomalia verdadeira (ν)
 
     p = a * (1.0 - e**2)
@@ -70,14 +69,11 @@ def _coe_to_rv(a, e, i_deg, raan_deg, argp_deg, nu_deg, mu):
     return C @ r_pqw, C @ v_pqw
 
 def reseed_state_with_inclination(r, v, mu, i_target_deg):
-    # mede elementos atuais com SUAS rotinas
     a0  = get_major_axis(r, v, mu)
     e0  = get_eccentricity(r, v, mu)
     O0  = get_ascending_node(r, v, mu)
     w0  = get_argument_of_perigee(r, v, mu)
-    nu0 = get_true_anormaly(r, v, mu)   # já em [0,360)
-
-    # troca apenas a inclinação
+    nu0 = get_true_anormaly(r, v, mu)   # [0,360)
     return _coe_to_rv(a0, e0, i_target_deg, O0, w0, nu0, mu)
 
 # ======== alvo de inclinação inicial (em graus) ========
@@ -85,8 +81,7 @@ I0_TARGET_DEG = 97.5
 r, v = reseed_state_with_inclination(r, v, mu, I0_TARGET_DEG)
 print(f"[check] i0 = {get_inclination(r, v, mu):.6f} deg")
 
-
-# Dois motores independentes (V e H)
+# ===================== Dois motores independentes (V e H) =====================
 DUAL_THRUSTERS = True
 THRUST_MODE = "sum"  # "sum" ou "split"
 
@@ -101,7 +96,7 @@ if DUAL_THRUSTERS:
 
 # ===================== Janelas em anomalia verdadeira =====================
 THRUST_INTERVAL_DEG = 30.0
-MEAN_THETA_LIST_DEG = [180.0]  # apogeu
+MEAN_THETA_LIST_DEG = [0]  # 180 apogeu - 0 perigeu
 
 def throttle(t, x):
     return 1.0 if x[6] > m_dry else 0.0
@@ -135,8 +130,8 @@ def x_dot(t, x):
     # Gravidade
     xdot[3:6] = -(mu/(rnorm**3))*r_vec
 
- # === AQUI: somar J2 no ODE (depois que xdot existe) ===
-    xdot[3:6] += _accel_J2(r_vec, v_vec, t)# adiciona as perturbações
+    # Perturbação J2 (opcional)
+    xdot[3:6] += _accel_J2(r_vec, v_vec, t)
 
     # Base RSW
     r_hat = r_vec / rnorm
@@ -156,7 +151,7 @@ def x_dot(t, x):
     if not DUAL_THRUSTERS:
         a_inst = (T / m_cur) / 1000.0
         alpha = np.deg2rad(45.0) if fire_H else 0.0
-        dir_hat = np.cos(alpha)*s_hat - np.sin(alpha)*w_hat  # DOWN
+        dir_hat = np.cos(alpha)*s_hat + np.sin(alpha)*w_hat  # UP
         if u > 0.0:
             xdot[3:6] += a_inst * dir_hat
             xdot[6] = - T/(Isp*g0)
@@ -165,7 +160,7 @@ def x_dot(t, x):
     else:
         aV = (T_V / m_cur) / 1000.0
         aH = (T_H / m_cur) / 1000.0 if fire_H else 0.0
-        SIGN_H = +1.0  # DOWN
+        SIGN_H = +1.0  # UP
 
         if u > 0.0:
             xdot[3:6] += aV * s_hat + SIGN_H * aH * w_hat
@@ -190,94 +185,132 @@ for k in range(X.shape[1]):
     r_vec = X[0:3, k]
     v_vec = X[3:6, k]
     orbital_elementss.append(get_orbital_elements(r_vec, v_vec, mu))
-
-    # --------- PATCH PRINCIPAL: usar SOMENTE o nu retornado (já em [0,360)) ---------
-    nu = get_true_anormaly(r_vec, v_vec, mu)
+    nu = get_true_anormaly(r_vec, v_vec, mu)   # já em [0,360)
     nus_deg.append(nu)
-
     incs_deg.append(get_inclination(r_vec, v_vec, mu))
 
-nus_deg = np.array(nus_deg)
-incs_deg = np.array(incs_deg)
+nus_deg = np.array(nus_deg, dtype=float)
+incs_deg = np.array(incs_deg, dtype=float)
 
-# ---------- métricas ----------
+# ===================== MÉTRICAS (Δv, v_peri/apo, etc.) =====================
 tt = t
+m_series = X[6, :]
+dt = np.diff(tt)
+
+# Normas de r e v para métricas de velocidade
 r_norm_series = np.linalg.norm(X[0:3, :].T, axis=1)
 v_norm_series = np.linalg.norm(X[3:6, :].T, axis=1)
-m_series = X[6, :]
 
-fire_mask = np.array([in_any_window(nu) for nu in nus_deg], dtype=bool)
-u_mask = (m_series > m_dry)
+# Máscaras
+fire_mask = np.array([in_any_window(nu) for nu in nus_deg], dtype=bool)  # H só em janelas
+u_mask    = (m_series > m_dry)                                           # tem propelente
 
-dt = np.diff(tt)
+# Acelerações instantâneas (km/s^2)
 aV_series = (T_V / np.maximum(m_series, 1e-18)) / 1000.0
 aH_series = (T_H / np.maximum(m_series, 1e-18)) / 1000.0
 
-delta_v_H_kms = float(np.sum(aH_series[:-1] * dt * (fire_mask[:-1] & u_mask[:-1])))
-delta_v_H_ms  = 1000.0 * delta_v_H_kms
-t_H_on = float(np.sum(dt * fire_mask[:-1]))
+# Δv (km/s) → integrações
+dv_V_kms = float(np.sum(aV_series[:-1] * dt * u_mask[:-1]))
+dv_H_kms = float(np.sum(aH_series[:-1] * dt * (fire_mask[:-1] & u_mask[:-1])))
 
-if np.any(fire_mask):
-    v_center = float(np.mean(v_norm_series[fire_mask]))
+# Conversões p/ m/s
+dv_V_ms = 1000.0 * dv_V_kms
+dv_H_ms = 1000.0 * dv_H_kms
+dv_total_ms = dv_V_ms + dv_H_ms
+
+# tempo com H ligado (s)
+t_H_on = float(np.sum(dt * (fire_mask[:-1])))
+
+# -------- v no perigeu/apogeu --------
+def peri_apo_speeds_from_elements(a: float, e: float, mu: float) -> tuple[float, float]:
+    a = float(a); e = float(e)
+    vp = np.sqrt(mu * (1.0 + e) / (a * (1.0 - e + 1e-32)))
+    va = np.sqrt(mu * (1.0 - e) / (a * (1.0 + e + 1e-32)))
+    return vp, va
+
+def ang_wrap_deg(x):
+    return (np.asarray(x, dtype=float) + 180.0) % 360.0 - 180.0
+
+def mask_near_angle(nu_deg: np.ndarray, center_deg: float, half_width_deg: float) -> np.ndarray:
+    return np.abs(ang_wrap_deg(nu_deg - center_deg)) <= half_width_deg
+
+a_series = np.array([el.major_axis for el in orbital_elementss], dtype=float)
+e_series = np.array([el.eccentricity for el in orbital_elementss], dtype=float)
+
+vp0, va0 = peri_apo_speeds_from_elements(a_series[0],  e_series[0],  mu)
+vpF, vaF = peri_apo_speeds_from_elements(a_series[-1], e_series[-1], mu)
+
+PERI_HALF_WIDTH = 1.0
+APO_HALF_WIDTH  = 1.0
+peri_mask = mask_near_angle(nus_deg, 0.0,   PERI_HALF_WIDTH)
+apo_mask  = mask_near_angle(nus_deg, 180.0, APO_HALF_WIDTH)
+
+if np.any(peri_mask):
+    v_peri_meas = float(np.mean(v_norm_series[peri_mask]))
 else:
-    v_center = float(np.min(v_norm_series))  # safe fallback
+    v_peri_meas = float(np.max(v_norm_series))
 
-arg = np.clip(delta_v_H_kms/(2.0*v_center), -1.0, 1.0)
+if np.any(apo_mask):
+    v_apo_meas = float(np.mean(v_norm_series[apo_mask]))
+else:
+    v_apo_meas = float(np.min(v_norm_series))
+
+# ---------- Relatórios ----------
+# Usa v_apogeu se a janela é centrada em 180°, senão v_perigeu
+v_ref = v_apo_meas if 180.0 in MEAN_THETA_LIST_DEG else v_peri_meas
+arg = np.clip((dv_H_kms) / (2.0 * v_ref), -1.0, 1.0)  # dv_H_kms está em km/s
 delta_i_ideal_deg = float(np.degrees(2.0*np.arcsin(arg)))
 delta_i_sim_deg = incs_deg - incs_deg[0]
 
-print("\n=== Dados V H Down ===")
+print("\n=== Dados V H UP ===")
 print(f"Tempo com H ligado (s):     {t_H_on:.6f}")
-print(f"Δv_H acumulado (m/s):       {delta_v_H_ms:.6f}")
+print(f"Δv_V     (m/s):             {dv_V_ms:.6f}")
+print(f"Δv_H     (m/s):             {dv_H_ms:.6f}")
+print(f"Δv_total (m/s):             {dv_total_ms:.6f}")
 print(f"Δi_ideal (graus):           {delta_i_ideal_deg:.9f}")
 print(f"Δi_sim (último - inicial):  {delta_i_sim_deg[-1]:.9f}")
 
-# ---------- plot dos elementos (seu utilitário) ----------
+if 0.0 in MEAN_THETA_LIST_DEG:
+    print(f"→ Janela centrada no PERIGEU: usar v ≈ {v_peri_meas:.9f} km/s (medido) "
+          f"ou {vpF:.9f} km/s (teórico no fim).")
+if 180.0 in MEAN_THETA_LIST_DEG:
+    print(f"→ Janela centrada no APOGEU: usar v ≈ {v_apo_meas:.9f} km/s (medido) "
+          f"ou {vaF:.9f} km/s (teórico no fim).")
+
+# ---------- plot dos elementos ----------
 plot_classic_orbital_elements(t, orbital_elementss)
 
-# 1) máscara "empuxo H ON": janela em nu E massa > m_dry
-thr_H_on_mask = (m_series > m_dry) & np.array([in_any_window(nu) for nu in nus_deg], dtype=bool)
+# 1) máscara "empuxo H ON"
+thr_H_on_mask = (m_series > m_dry) & fire_mask
 
-# 2) utilitários para converter máscara em intervalos e sombrear no gráfico
-def _mask_to_spans(t, mask_bool):
-    t = np.asarray(t, float); mask = np.asarray(mask_bool, bool)
+# 2) sombrear no gráfico
+def _mask_to_spans(tarr, mask_bool):
+    tarr = np.asarray(tarr, float); mask = np.asarray(mask_bool, bool)
     if mask.size == 0: return []
     rises  = np.where(np.diff(mask.astype(np.int8)) == +1)[0] + 1
     falls  = np.where(np.diff(mask.astype(np.int8)) == -1)[0] + 1
     if mask[0]:  rises = np.r_[0, rises]
     if mask[-1]: falls = np.r_[falls, mask.size-1]
-    return list(zip(t[rises], t[falls]))
+    return list(zip(tarr[rises], tarr[falls]))
 
-def add_thrust_spans(ax, t, mask_bool, *, color="tab:orange", alpha=0.15, label="Empuxo H ON"):
-    for t0, t1 in _mask_to_spans(t, mask_bool):
+def add_thrust_spans(ax, tarr, mask_bool, *, color="tab:orange", alpha=0.15, label="Empuxo H ON"):
+    for t0, t1 in _mask_to_spans(tarr, mask_bool):
         ax.axvspan(t0, t1, color=color, alpha=alpha, lw=0)
-    # handle de legenda (1 entrada só)
     handles, labels = ax.get_legend_handles_labels()
     patch = mpatches.Patch(color=color, alpha=alpha, label=label)
     if label not in labels:
         ax.legend(handles + [patch], labels + [label])
 
-# (opcional) só marcar as bordas com linhas tracejadas:
-def add_thrust_edges(ax, t, mask_bool, *, color="tab:orange", alpha=0.7):
-    idx_on = np.where(np.diff(mask_bool.astype(np.int8)) == +1)[0] + 1
-    for i in idx_on:
-        ax.axvline(t[i], color=color, ls="--", lw=0.8, alpha=alpha)
-
-# 3) exemplo: Ω(t) desenrolado com as faixas do empuxo H
 def _unwrap_deg(a_deg):
     return np.degrees(np.unwrap(np.radians(np.asarray(a_deg, float))))
 
 Omega_series = [el.ascending_node for el in orbital_elementss]
 Omega_unw = _unwrap_deg(Omega_series)
 
-t_plot = t/86400.0  # se preferir em dias
+t_plot = t/86400.0  # dias
 fig, ax = plt.subplots()
 ax.plot(t_plot, Omega_unw, 'r-', lw=1.2, label='Ω (desenrolado)')
-# sombreia quando H está ligado
 add_thrust_spans(ax, t_plot, thr_H_on_mask, color="tab:orange", alpha=0.18, label="Empuxo H ON")
-# (opcional) bordas:
-# add_thrust_edges(ax, t_plot, thr_H_on_mask)
-
 ax.set_xlabel("Tempo [dias]"); ax.set_ylabel("Ω [graus]")
 ax.set_title("RAAN com janelas de empuxo H destacadas")
 ax.grid(True); plt.show()
@@ -285,38 +318,30 @@ ax.grid(True); plt.show()
 # ---------- plot 3D ----------
 fig = plt.figure()
 ax = fig.add_subplot(111, projection="3d")
-
-# Wireframe da Terra
 u_grid, v_grid = np.mgrid[0:2*np.pi:30j, 0:np.pi:15j]
 x_e = earth_radius * np.cos(u_grid) * np.sin(v_grid)
 y_e = earth_radius * np.sin(u_grid) * np.sin(v_grid)
 z_e = earth_radius * np.cos(v_grid)
 ax.plot_wireframe(x_e, y_e, z_e, color="g", alpha=0.3)
-
-# Trajetória
-ax.plot3D(X[0, :], X[1, :], X[2, :], 'r', label="Satélite V_H DOWN")
+ax.plot3D(X[0, :], X[1, :], X[2, :], 'r', label="Satélite V_H UP")
 ax.set_box_aspect([1, 1, 1])
-ax.set_title("Órbita simulada - Satélite V_H DOWN")
+ax.set_title("Órbita simulada - Satélite V_H UP")
 ax.legend()
 ax.axis('equal')
 
-# ---------- plot i(nu) SEM “dente de serra” (segmentado por wraps) ----------
+# ---------- i(ν) sem dente de serra ----------
 def plot_i_vs_nu_segmentado(nu_deg: np.ndarray, inc_deg: np.ndarray, *, ax=None, **plot_kw):
     nu_deg = np.asarray(nu_deg, dtype=float)
     inc_deg = np.asarray(inc_deg, dtype=float)
     if ax is None:
         fig_loc, ax = plt.subplots()
-
-    # detecta wraps quando volta de ~360 para ~0
     dn = np.diff(nu_deg)
     wraps = np.where(dn < -180.0)[0]
-
     start = 0
     for w in wraps:
         ax.plot(nu_deg[start:w+1], inc_deg[start:w+1], **plot_kw)
         start = w + 1
     ax.plot(nu_deg[start:], inc_deg[start:], **plot_kw)
-
     ax.set_xlabel(r'$\nu$ (deg)')
     ax.set_ylabel(r'$i$ (deg)')
     ax.set_xlim(0.0, 360.0)
@@ -324,19 +349,16 @@ def plot_i_vs_nu_segmentado(nu_deg: np.ndarray, inc_deg: np.ndarray, *, ax=None,
     return ax
 
 fig2, ax2 = plt.subplots()
-plot_i_vs_nu_segmentado(nus_deg, incs_deg, ax=ax2, color="red", lw=1.5, label="i vs. nu")
+plot_i_vs_nu_segmentado(nus_deg, incs_deg, ax=ax2, color="red", lw=1.5, label="i vs. ν")
 ax2.legend()
-
 plt.show()
 
 def simulate():
     """
-    Executa a integração com o x_dot deste módulo (VH DOWN) e devolve:
+    Executa a integração com o x_dot deste módulo (VH UP) e devolve:
     (t, X, nus_deg, incs_deg, orbital_elementss)
     """
-    # estado inicial inclui massa
     x0 = np.concatenate((r, v, [m0]))
-
     sol = solve_ivp(x_dot, (t[0], t[-1]), x0, t_eval=t, method='RK45')
     X = sol.y
 
@@ -347,13 +369,9 @@ def simulate():
     for k in range(X.shape[1]):
         r_vec = X[0:3, k]
         v_vec = X[3:6, k]
-
         orbital_elementss.append(get_orbital_elements(r_vec, v_vec, mu))
-
-        # nu já corrige quadrante e retorna [0, 360)
         nu = get_true_anormaly(r_vec, v_vec, mu)
         nus_deg.append(nu)
-
         incs_deg.append(get_inclination(r_vec, v_vec, mu))
 
     return t, X, np.array(nus_deg, dtype=float), np.array(incs_deg, dtype=float), orbital_elementss
