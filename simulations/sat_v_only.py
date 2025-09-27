@@ -8,9 +8,9 @@ from utils.visualization import plot_classic_orbital_elements
 r = np.array([6890.3, 0, 0]) #parametro da ITASAT 1
 v = np.array([0, -0.992,7.535])
 
-#r = np.array([10016.34, -17012.52, 7899.28]) parametros orbitais iniciais
+#r = np.array([10016.34, -17012.52, 7899.28]) #parametros orbitais iniciais
 #v = np.array([2.5, -1.05, 3.88])
-t = np.linspace(0, 432000, 100000)  # 5 dias
+t = np.linspace(0, 43200, 100000)  # 5 dias
 earth_radius = 6378.0  # km
 mu = 3.986e5
 thrust = 1.1e-3 # N (força fixa)
@@ -219,7 +219,6 @@ print("\n=== Δv acumulado (V-only) ===")
 print(f"Δv_V     (m/s): {dv_V_ms:.6f}")
 print(f"Δv_H     (m/s): {dv_H_ms:.6f}")
 print(f"Δv_total (m/s): {dv_total_ms:.6f}")
-
 
 # ---------- utilitário: plot i(nu) segmentado e com cor fixa ----------
 def plot_i_vs_nu_segmentado(nu_deg: np.ndarray, inc_deg: np.ndarray, *, ax=None,
