@@ -132,9 +132,8 @@ for k in range(X.shape[1]):
     r_vec = X[0:3, k]
     v_vec = X[3:6, k]
     orbital_elementss.append(get_orbital_elements(r_vec, v_vec, mu))
-
-    # USE APENAS o valor retornado (já em [0,360))
     nu = get_true_anormaly(r_vec, v_vec, mu)
+
     nus_deg.append(nu)
 
     incs_deg.append(get_inclination(r_vec, v_vec, mu))

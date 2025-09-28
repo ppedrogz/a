@@ -6,12 +6,10 @@ from cycler import cycler
 # --------- helpers p/ plot ----------
 
 def _unwrap_deg(angle_deg: np.ndarray) -> np.ndarray:
-    """desembrulha em rad e volta p/ deg (contínuo), útil p/ Ω, ω, ν"""
     ang = np.asarray(angle_deg, dtype=float)
     return np.degrees(np.unwrap(np.radians(ang)))
 
 def _rolling_mean(y: np.ndarray, win: int) -> np.ndarray:
-    """média móvel simples (janela ímpar)"""
     win = int(max(1, win | 1))  # força ímpar
     if win <= 1:
         return np.asarray(y, dtype=float)
@@ -19,7 +17,6 @@ def _rolling_mean(y: np.ndarray, win: int) -> np.ndarray:
     return np.convolve(np.asarray(y, float), k, mode="same")
 
 def _mod360_cont(angle_deg_cont: np.ndarray) -> np.ndarray:
-    """aplica módulo 360 preservando continuidade local"""
     return np.mod(angle_deg_cont, 360.0)
 
 def _mask_if(cond: np.ndarray, y: np.ndarray) -> np.ndarray:
@@ -30,10 +27,6 @@ def _mask_if(cond: np.ndarray, y: np.ndarray) -> np.ndarray:
 # ===== NOVOS helpers para continuidade/ZOH/exibição =====
 
 def _contiguous_from_prev(raw_deg: np.ndarray) -> np.ndarray:
-    """
-    Constrói série contínua a partir de valores em [0,360):
-    faz o wrap pelo vizinho mais próximo (±180°).
-    """
     raw_deg = np.asarray(raw_deg, float)
     if raw_deg.size == 0:
         return raw_deg.copy()
@@ -45,18 +38,11 @@ def _contiguous_from_prev(raw_deg: np.ndarray) -> np.ndarray:
     return cont
 
 def _to_0_360_no_edge_jump(y_cont: np.ndarray, eps: float = 1e-9) -> np.ndarray:
-    """
-    Converte série contínua para [0,360) na exibição, “colando” 360 com 0.
-    """
     y_mod = np.mod(y_cont, 360.0)
     y_mod[np.abs(360.0 - y_mod) < eps] = 0.0
     return y_mod
 
 def _zoh_when_masked(y: np.ndarray, mask: np.ndarray) -> np.ndarray:
-    """
-    Hold-last (ZOH) quando mask=True. Útil para Ω e ω quando indefinidos
-    (i≈0°/180° para Ω; e≈0 para ω).
-    """
     y = np.array(y, float, copy=True)
     if y.size == 0:
         return y
@@ -69,20 +55,18 @@ def _zoh_when_masked(y: np.ndarray, mask: np.ndarray) -> np.ndarray:
             last = y[k]
     return y
 
-# ---------------- parâmetros “de plot” (não afetam dinâmica) ---------------
-# pode ajustar conforme o ruído da tua integração
-_EPS_I_PLOT_DEG   = 1e-6      # máscara equatorial só quando i é extremamente pequeno
-_EPS_E_PLOT       = 0.0       # NÃO "snap-to-zero": mostra e pequeno
-_WIN_E_SMOOTH_F   = 200       # janela ~N/_WIN_E_SMOOTH_F para e
-_WIN_ANG_SMOOTH_F = 1000      # janela ~N/_WIN_ANG_SMOOTH_F para ângulos (menos suavização)
+_EPS_I_PLOT_DEG   = 1e-6
+_EPS_E_PLOT       = 2e-3      # mesmo limiar do cálculo
+_WIN_E_SMOOTH_F   = 200
+_WIN_ANG_SMOOTH_F = 1000
 
 def _series_from(orbital_elementss: list[OrbitalElements]):
     a  = np.array([e.major_axis           for e in orbital_elementss], float)
     ec = np.array([e.eccentricity         for e in orbital_elementss], float)
-    inc= np.array([e.inclination          for e in orbital_elementss], float)     # deg
-    Om = np.array([e.ascending_node       for e in orbital_elementss], float)     # deg
-    w  = np.array([e.argument_of_perigee  for e in orbital_elementss], float)     # deg
-    nu = np.array([e.true_anomaly         for e in orbital_elementss], float)     # deg
+    inc= np.array([e.inclination          for e in orbital_elementss], float)
+    Om = np.array([e.ascending_node       for e in orbital_elementss], float)
+    w  = np.array([e.argument_of_perigee  for e in orbital_elementss], float)
+    nu = np.array([e.true_anomaly         for e in orbital_elementss], float)
     return a, ec, inc, Om, w, nu
 
 def _process_angles_for_plot(inc_deg, Om_deg, w_deg, nu_deg,
@@ -91,26 +75,17 @@ def _process_angles_for_plot(inc_deg, Om_deg, w_deg, nu_deg,
                              use_zoh_on_circular: bool = True,
                              e_series: np.ndarray | None = None,
                              e_eps: float = _EPS_E_PLOT):
-    """
-    - Ω contínuo (sem %360 no traço), com ZOH quando i≈0°/180° (indefinido).
-    - ω contínuo, com ZOH quando e≈0 (indefinido em circular) e quando i≈0°/180° (equatorial).
-    - ν contínuo (sem %360).
-    - show_mod360=True remapeia no FINAL para [0,360) sem criar degrau.
-    """
     N = len(inc_deg)
     win_ang = max(5, (N // _WIN_ANG_SMOOTH_F) | 1)
 
-    # continuidade sem %360 (evita degrau)
     Om_cont = _contiguous_from_prev(Om_deg)
     w_cont  = _contiguous_from_prev(w_deg)
     nu_cont = _contiguous_from_prev(nu_deg)
 
-    # suavização leve
     Om_cont = _rolling_mean(Om_cont, win_ang)
     w_cont  = _rolling_mean(w_cont,  win_ang)
     nu_cont = _rolling_mean(nu_cont, win_ang)
 
-    # máscaras: equatorial (Ω e ω indefinidos) e circular (ω indefinido)
     dist_eq  = np.minimum(np.abs(inc_deg), np.abs(180.0 - inc_deg))
     mask_eq  = (dist_eq < _EPS_I_PLOT_DEG)
 
@@ -120,20 +95,18 @@ def _process_angles_for_plot(inc_deg, Om_deg, w_deg, nu_deg,
         e_s = np.asarray(e_series, float)
         mask_circ = (e_s < e_eps)
 
-    # ZOH quando indefinidos
     if use_zoh_on_equatorial:
-        Om_cont = _zoh_when_masked(Om_cont, mask_eq)  # Ω indef. em equatorial
-        w_cont  = _zoh_when_masked(w_cont,  mask_eq)  # ω idem
+        Om_cont = _zoh_when_masked(Om_cont, mask_eq)
+        w_cont  = _zoh_when_masked(w_cont,  mask_eq)
     else:
         Om_cont = _mask_if(mask_eq, Om_cont)
         w_cont  = _mask_if(mask_eq, w_cont)
 
     if use_zoh_on_circular:
-        w_cont = _zoh_when_masked(w_cont, mask_circ)  # ω indef. em circular
+        w_cont = _zoh_when_masked(w_cont, mask_circ)
     else:
         w_cont = _mask_if(mask_circ, w_cont)
 
-    # saída: contínuo ou [0,360) sem degrau
     if show_mod360:
         Om_plot = _to_0_360_no_edge_jump(Om_cont)
         w_plot  = _to_0_360_no_edge_jump(w_cont)
@@ -145,30 +118,25 @@ def _process_angles_for_plot(inc_deg, Om_deg, w_deg, nu_deg,
 
 def _process_e_for_plot(e):
     """
-    Suaviza e (sem forçar a zero por padrão).
+    Suaviza e e faz snap-to-zero abaixo do limiar (remove tremulação numérica),
+    sem “matar” a evolução de ω quando e é pequeno mas não ~0.
     """
     e = np.asarray(e, float)
     N = len(e)
     win_e = max(5, (N // _WIN_E_SMOOTH_F) | 1)
     e_smooth = _rolling_mean(e, win_e)
-    # sem snap-to-zero; se quiser, use: np.where(e_smooth < 2e-3, 0.0, e_smooth)
-    return e_smooth
+    return np.where(e_smooth < _EPS_E_PLOT, 0.0, e_smooth)
+
 
 def plot_classic_orbital_elements(t: np.typing.NDArray, orbital_elementss: list[OrbitalElements]):
-    """
-    Plota elementos orbitais clássicos com tratamentos de plot para:
-    - Ω: série contínua (sem %360), ZOH quando i≈0°/180°
-    - e: suavização (sem snap-to-zero por padrão)
-    - ω, ν: séries contínuas (sem %360) para eliminar degraus 360→0
-    """
     a, e, inc, Om, w, nu = _series_from(orbital_elementss)
-    e_plot = _process_e_for_plot(e)  # processa e primeiro (fornecer a série para ω)
+    e_plot = _process_e_for_plot(e)
     Om_plot, w_plot, nu_plot = _process_angles_for_plot(
         inc, Om, w, nu,
-        show_mod360=False,              # contínuo: melhor p/ ver precessão de Ω
-        use_zoh_on_equatorial=True,     # segura Ω/ω quando i≈0°/180°
-        use_zoh_on_circular=True,       # segura ω quando e≈0
-        e_series=e,                     # série crua de e para detecção de circular
+        show_mod360=True,              # <<< ALTERADO: exibe 0–360° sem degrau
+        use_zoh_on_equatorial=True,
+        use_zoh_on_circular=True,
+        e_series=e,
         e_eps=_EPS_E_PLOT
     )
 
@@ -219,11 +187,7 @@ def plot_classic_orbital_elements(t: np.typing.NDArray, orbital_elementss: list[
     plt.tight_layout()
     plt.show()
 
-
 def plot_classic_orbital_elements_overlay(*orbital_elementss_lists: list[np.typing.NDArray, list[OrbitalElements]]):
-    """
-    Recebe tuplas (t, orbital_elementss) e sobrepõe os elementos com os mesmos tratamentos.
-    """
     fig, axs = plt.subplots(3, 2, figsize=(12, 10))
 
     for idx, orbital_elementss_list in enumerate(orbital_elementss_lists):
@@ -234,7 +198,7 @@ def plot_classic_orbital_elements_overlay(*orbital_elementss_lists: list[np.typi
         e_plot = _process_e_for_plot(e)
         Om_plot, w_plot, nu_plot = _process_angles_for_plot(
             inc, Om, w, nu,
-            show_mod360=False,
+            show_mod360=True,          # <<< ALTERADO: exibe 0–360° sem degrau
             use_zoh_on_equatorial=True,
             use_zoh_on_circular=True,
             e_series=e,
@@ -257,7 +221,6 @@ def plot_classic_orbital_elements_overlay(*orbital_elementss_lists: list[np.typi
 
     plt.tight_layout()
     plt.show()
-
 
 def plot_3D_view(
         X,
