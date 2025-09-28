@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Tuple, Dict
 
 # --- use seus utilitários existentes de elementos orbitais ---
-from utils.GetClassicOrbitalElements import (
+from utils.orbitalElements import (
     get_orbital_elements,
     get_inclination,
     get_eccentricity_vector,
