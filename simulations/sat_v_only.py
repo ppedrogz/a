@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
-from utils.orbitalElements import *
+from utils.orbitalElementsOperations import *
 from utils.visualization import plot_classic_orbital_elements
 
 # ===================== condições iniciais =====================
