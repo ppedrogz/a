@@ -137,7 +137,8 @@ def x_dot(t, x):
     else:
         aV = (T_V / m_cur) / 1000.0
         aH = (T_H / m_cur) / 1000.0 if fire_H else 0.0
-        SIGN_H = -1.0  # UP
+        u_deg = get_argument_of_latitude(r_vec, v_vec, mu)     # u em graus
+        SIGN_H = -np.sign(np.cos(np.deg2rad(u_deg)))       
 
         if u > 0.0:
             xdot[3:6] += aV * s_hat + SIGN_H * aH * w_hat

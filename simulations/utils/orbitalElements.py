@@ -115,9 +115,20 @@ def get_eccentricity(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> f
 
 def get_inclination(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
     h = np.cross(r, v)
-    hnorm = _safe_norm(h)
-    i_rad = _safe_acos(h[2]/hnorm) if hnorm > 0.0 else 0.0
-    return _wrap360_deg(i_rad)
+    h_norm = np.linalg.norm(h)
+    # atan2(sin(i), cos(i)), where sin(i) = sqrt(hx^2 + hy^2)/|h|, cos(i) = hz/|h|
+    sin_i = np.sqrt(h[0]**2 + h[1]**2) / h_norm
+    cos_i = h[2] / h_norm
+
+    i_rad = np.arctan2(sin_i, cos_i)
+
+    i = np.rad2deg(i_rad)
+
+    if i < 1e-4:
+        i = 0
+
+    return i
+
 
 def get_ascending_node(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
     h = np.cross(r, v)
@@ -133,6 +144,7 @@ def get_ascending_node(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) ->
     Omega = np.rad2deg(Omega_rad)
 
     return Omega
+
 def get_argument_of_perigee(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
     # se e ~ 0, ω é indefinido → fixe 0
     e_vec = get_eccentricity_vector(r, v, mu)

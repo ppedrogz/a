@@ -20,7 +20,7 @@ def _wrap360_deg(th_rad: float) -> float:
 def _atan2(y: float, x: float) -> float:
     return float(np.arctan2(y, x))
 
-_EPS_E = 1e-3             # só trata como circular quando e < 0.002
+_EPS_E = 0          # só trata como circular quando e < 0.002
 _EPS_I = np.deg2rad(1e-8) # i muito pequeno => equatorial
 
 
@@ -104,15 +104,25 @@ def get_orbital_elements(*args) -> OrbitalElements:
         omega_deg = _wrap360_deg(np.arctan2(ey, ex))
         nu_deg    = (alpha_v_deg - omega_deg) % 360.0
         return OrbitalElements(
-            major_axis=a, eccentricity=e, inclination=inc,
-            ascending_node=Omega_deg, argument_of_perigee=omega_deg, true_anomaly=nu_deg
+            major_axis=a,
+            eccentricity=e,
+            inclination=inc,
+            ascending_node=Omega_deg,
+            argument_of_perigee=omega_deg,
+            true_anomaly=nu_deg,
+            argument_of_latitude=alpha_v_deg   # <<< CORRETO: u = α_v
         )
 
+
     if circular and not equatorial:
-        # circular-inclinada: u no lugar de ν; ω indefinido
         return OrbitalElements(
-            major_axis=a, eccentricity=0.0, inclination=inc,
-            ascending_node=Omega_deg, argument_of_perigee=0.0, true_anomaly=alpha_v_deg
+            major_axis=a,
+            eccentricity=0.0,
+            inclination=inc,
+            ascending_node=Omega_deg,
+            argument_of_perigee=0.0,
+            true_anomaly=alpha_v_deg,
+            argument_of_latitude=alpha_v_deg   # <<< inclui u
         )
 
     if (not circular) and equatorial:
@@ -150,13 +160,20 @@ def get_eccentricity(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> f
 
 def get_inclination(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
     h = np.cross(r, v)
-    h_norm = _safe_norm(h)
-    cos_i = h[2]/h_norm if h_norm > 0.0 else 1.0
-    i_rad = np.arccos(_clamp(cos_i))
-    i_deg = np.degrees(i_rad)
-    if i_deg < 1e-6: return 0.0
-    if abs(i_deg - 180.0) < 1e-6: return 180.0
-    return i_deg
+    h_norm = np.linalg.norm(h)
+    # atan2(sin(i), cos(i)), where sin(i) = sqrt(hx^2 + hy^2)/|h|, cos(i) = hz/|h|
+    sin_i = np.sqrt(h[0]**2 + h[1]**2) / h_norm
+    cos_i = h[2] / h_norm
+
+    i_rad = np.arctan2(sin_i, cos_i)
+
+    i = np.rad2deg(i_rad)
+
+    if i < 1e-4:
+        i = 0
+
+    return i
+
 
 def get_ascending_node(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
     h = np.cross(r, v)
@@ -210,12 +227,17 @@ def get_period(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
 
 # ================= elementos alternativos (opcionais) =================
 def get_argument_of_latitude(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
-    h = np.cross(r, v); hhat = _safe_unit(h)
-    n = np.cross(Bases.k, h); nnorm = _safe_norm(n)
-    if nnorm <= 0.0:
-        return _wrap360_deg(_atan2(r[1], r[0]))  # λ
-    u = _atan2(np.dot(np.cross(n, r), hhat), np.dot(n, r))
-    return _wrap360_deg(u)
+    h = np.cross(r, v)
+    n = np.cross(Bases.k, h)
+
+    dot_rn = np.dot(r, n)
+    cross_rn = np.cross(r, n)
+
+    sigma_rad = np.atan2(np.linalg.norm(cross_rn), dot_rn)
+
+    sigma_deg = np.rad2deg(sigma_rad)
+
+    return sigma_deg
 
 def get_longitude_of_periapsis(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
     e_vec = get_eccentricity_vector(r, v, mu); e = _safe_norm(e_vec)

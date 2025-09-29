@@ -78,14 +78,12 @@ def _process_angles_for_plot(inc_deg, Om_deg, w_deg, nu_deg,
     N = len(inc_deg)
     win_ang = max(5, (N // _WIN_ANG_SMOOTH_F) | 1)
 
+    # 1) desenrolar (contiguidade)
     Om_cont = _contiguous_from_prev(Om_deg)
     w_cont  = _contiguous_from_prev(w_deg)
     nu_cont = _contiguous_from_prev(nu_deg)
 
-    Om_cont = _rolling_mean(Om_cont, win_ang)
-    w_cont  = _rolling_mean(w_cont,  win_ang)
-    nu_cont = _rolling_mean(nu_cont, win_ang)
-
+    # 3) máscaras de regimes degenerados
     dist_eq  = np.minimum(np.abs(inc_deg), np.abs(180.0 - inc_deg))
     mask_eq  = (dist_eq < _EPS_I_PLOT_DEG)
 
@@ -95,6 +93,7 @@ def _process_angles_for_plot(inc_deg, Om_deg, w_deg, nu_deg,
         e_s = np.asarray(e_series, float)
         mask_circ = (e_s < e_eps)
 
+    # 4) ZOH/NaN conforme opção
     if use_zoh_on_equatorial:
         Om_cont = _zoh_when_masked(Om_cont, mask_eq)
         w_cont  = _zoh_when_masked(w_cont,  mask_eq)
@@ -107,12 +106,16 @@ def _process_angles_for_plot(inc_deg, Om_deg, w_deg, nu_deg,
     else:
         w_cont = _mask_if(mask_circ, w_cont)
 
+    # 5) volta para [0,360) sem degrau na borda, se pedido
     if show_mod360:
         Om_plot = _to_0_360_no_edge_jump(Om_cont)
         w_plot  = _to_0_360_no_edge_jump(w_cont)
         nu_plot = _to_0_360_no_edge_jump(nu_cont)
     else:
         Om_plot, w_plot, nu_plot = Om_cont, w_cont, nu_cont
+
+    return Om_plot, w_plot, nu_plot
+
 
     return Om_plot, w_plot, nu_plot
 
@@ -204,14 +207,12 @@ def plot_classic_orbital_elements(t: np.typing.NDArray, orbital_elementss: list[
     axs[1, 1].grid(True)
     axs[1, 1].legend()
     # ----- Argument of Latitude (u) -----
-    axs[2, 0].plot(t, u_plot, label='Argument of Latitude (u)', color='purple')
-    axs[2, 0].set_title('Argument of Latitude (u)')
+    axs[2, 0].plot(t, [element.argument_of_latitude for element in orbital_elementss], label='Argument of Latitude')
+    axs[2, 0].set_title('Argument of Latitude')
     axs[2, 0].set_xlabel('Time (s)')
-    axs[2, 0].set_ylabel('Argument of Latitude (deg)')
-    axs[2, 0].set_ylim(0.0, 360.0)                       # <<< novo
-    axs[2, 0].set_yticks([0, 60, 120, 180, 240, 300, 360])  # <<< novo
-    axs[2, 0].grid(True)                                  # <<< corrigido
-    axs[2, 0].legend()                                    # <<< corrigido
+    axs[2, 0].set_ylabel('Argument of Latitude (degrees)')
+    axs[2, 0].grid(True)
+    axs[2, 0].legend()                               # <<< corrigido
 
     axs[2, 1].plot(t, nu_plot, label='True Anomaly', color='brown')
     axs[2, 1].set_title('True Anomaly')

@@ -13,7 +13,7 @@ v = np.array([-0.932454, -0.302973, 7.548972])
 
 #r = np.array([10016.34, -17012.52, 7899.28]) parametros orbitais iniciais
 #v = np.array([2.5, -1.05, 3.88])
-t = np.linspace(0, 43200, 100000)  # 5 dias, 100k pontos
+t = np.linspace(0, 432000, 1000000)  # 5 dias, 100k pontos
 earth_radius = 6378.0  # km
 mu = 3.986e5
 
@@ -135,7 +135,8 @@ def x_dot(t, x):
     else:
         aV = (T_V / m_cur) / 1000.0
         aH = (T_H / m_cur) / 1000.0 if fire_H else 0.0
-        SIGN_H = +1.0  # UP
+        u_deg = get_argument_of_latitude(r_vec, v_vec, mu)     # u em graus
+        SIGN_H = np.sign(np.cos(np.deg2rad(u_deg)))       
 
         if u > 0.0:
             xdot[3:6] += aV * s_hat + SIGN_H * aH * w_hat
