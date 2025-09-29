@@ -6,10 +6,10 @@ from utils.visualization import plot_classic_orbital_elements
 
 # ===================== condições iniciais =====================
 # Vetores de estado (ECI, km e km/s)
-r = np.array([2128.5832, -6551.1055, 0.0000])   # km
-v = np.array([-0.932454, -0.302973, 7.548972])
-#r= np.array([6890.3, 0, 0]) #parametro da ITASAT 1
-#v=np.array([0, -0.992,7.535])
+r = np.array([6877.452, 0.0, 0.0])  #parametros itasat 2
+v = np.array([0.0, 5.383, 5.383]) 
+#r = np.array([2128.5832, -6551.1055, 0.0000])   #itasat 1 com nodo ascendente em 280°
+#v = np.array([-0.932454, -0.302973, 7.548972])
 #r= np.array([10016.34, -17012.52, 7899.28]) #parametros orbitais iniciais
 #v= np.array([2.5, -1.05, 3.88])
 t = np.linspace(0, 43200, 100000)  # 5 dias
@@ -31,7 +31,7 @@ m_dry = 15.0   # kg
 from J2 import external_accel, EarthParams, PerturbationFlags
 
 # Flag de módulo para ligar/desligar J2 (não mexe no resto do código)
-_J2_ON = False
+_J2_ON = True
 
 def _accel_J2(r_vec, v_vec, t):
     if _J2_ON:

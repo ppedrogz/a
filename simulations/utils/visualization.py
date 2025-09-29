@@ -24,41 +24,12 @@ def _mask_if(cond: np.ndarray, y: np.ndarray) -> np.ndarray:
     z[cond] = np.nan
     return z
 
-# ===== NOVOS helpers para continuidade/ZOH/exibição =====
-
-def _contiguous_from_prev(raw_deg: np.ndarray) -> np.ndarray:
-    raw_deg = np.asarray(raw_deg, float)
-    if raw_deg.size == 0:
-        return raw_deg.copy()
-    cont = np.empty_like(raw_deg)
-    cont[0] = raw_deg[0]
-    for k in range(1, raw_deg.size):
-        delta = ((raw_deg[k] - raw_deg[k-1] + 180.0) % 360.0) - 180.0
-        cont[k] = cont[k-1] + delta
-    return cont
-
-def _to_0_360_no_edge_jump(y_cont: np.ndarray, eps: float = 1e-9) -> np.ndarray:
-    y_mod = np.mod(y_cont, 360.0)
-    y_mod[np.abs(360.0 - y_mod) < eps] = 0.0
-    return y_mod
-
-def _zoh_when_masked(y: np.ndarray, mask: np.ndarray) -> np.ndarray:
-    y = np.array(y, float, copy=True)
-    if y.size == 0:
-        return y
-    valid = ~mask & ~np.isnan(y)
-    last = y[valid][0] if np.any(valid) else 0.0
-    for k in range(y.size):
-        if mask[k] or np.isnan(y[k]):
-            y[k] = last
-        else:
-            last = y[k]
-    return y
-
-_EPS_I_PLOT_DEG   = 1e-6
-_EPS_E_PLOT       = 2e-3    # mesmo do orbitalElementsOperations
-_WIN_E_SMOOTH_F   = 200
-_WIN_ANG_SMOOTH_F = 1000
+# ---------------- parâmetros “de plot” (não afetam dinâmica) ---------------
+# pode ajustar conforme o ruído da tua integração
+_EPS_I_PLOT_DEG = 1e-4      # trata i≈0° ou i≈180° como equatorial p/ Ω (indefinido no plot)
+_EPS_E_PLOT     = 2e-3      # trata e<0.002 como “quase circular” p/ suavizar excentricidade
+_WIN_E_SMOOTH_F = 200       # janela ~N/_WIN_E_SMOOTH_F para e
+_WIN_ANG_SMOOTH_F = 300     # janela ~N/_WIN_ANG_SMOOTH_F para ângulos
 
 def _series_from(orbital_elementss: list[OrbitalElements]):
     a  = np.array([e.major_axis           for e in orbital_elementss], float)
