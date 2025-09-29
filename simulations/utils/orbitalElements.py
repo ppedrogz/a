@@ -100,7 +100,8 @@ def get_orbital_elements(*args) -> OrbitalElements:
         inclination=i_deg,
         ascending_node=Omega_deg,
         argument_of_perigee=omega_deg,
-        true_anomaly=nu_deg  # mantém o nome que seu código já espera
+        true_anomaly=nu_deg
+          # mantém o nome que seu código já espera
     )
 
 # ---------------- funções auxiliares (assinaturas antigas mantidas) ----------------
