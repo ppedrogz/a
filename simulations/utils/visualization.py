@@ -56,7 +56,7 @@ def _zoh_when_masked(y: np.ndarray, mask: np.ndarray) -> np.ndarray:
     return y
 
 _EPS_I_PLOT_DEG   = 1e-6
-_EPS_E_PLOT       = 2e-3      # mesmo limiar do cálculo
+_EPS_E_PLOT       = 2e-3    # mesmo do orbitalElementsOperations
 _WIN_E_SMOOTH_F   = 200
 _WIN_ANG_SMOOTH_F = 1000
 
@@ -127,18 +127,52 @@ def _process_e_for_plot(e):
     e_smooth = _rolling_mean(e, win_e)
     return np.where(e_smooth < _EPS_E_PLOT, 0.0, e_smooth)
 
+def _plot_wrapped(ax, t, y_deg, **plot_kw):
+    """
+    Plota ângulo em [0,360) sem conectar segmentos através do wrap.
+    Quebra onde |Δy|>180°.
+    """
+    t = np.asarray(t, float)
+    y = np.asarray(y_deg, float)
+    if y.size == 0:
+        return
+    dy = np.diff(y)
+    cuts = np.where(np.abs(dy) > 180.0)[0]
+    start = 0
+    for c in cuts:
+        ax.plot(t[start:c+1], y[start:c+1], **plot_kw)
+        start = c + 1
+    ax.plot(t[start:], y[start:], **plot_kw)
 
 def plot_classic_orbital_elements(t: np.typing.NDArray, orbital_elementss: list[OrbitalElements]):
     a, e, inc, Om, w, nu = _series_from(orbital_elementss)
     e_plot = _process_e_for_plot(e)
     Om_plot, w_plot, nu_plot = _process_angles_for_plot(
         inc, Om, w, nu,
-        show_mod360=True,              # <<< ALTERADO: exibe 0–360° sem degrau
+        show_mod360=True,              # exibe 0–360° sem degrau
         use_zoh_on_equatorial=True,
         use_zoh_on_circular=True,
         e_series=e,
         e_eps=_EPS_E_PLOT
     )
+    # --- Argumento de latitude: u = ν + ω ---
+    # usa pipeline idêntico: contiguous -> suavização -> ZOH em equatorial
+    u_raw = (w + nu) % 360.0
+    N = len(u_raw)
+    win_ang = max(5, (N // _WIN_ANG_SMOOTH_F) | 1)
+
+    u_cont = _contiguous_from_prev(u_raw)
+    u_cont = _rolling_mean(u_cont, win_ang)
+
+    # <<< NOVO: traz de volta para [0, 360) sem “dente” na borda
+    u_mod  = _to_0_360_no_edge_jump(u_cont)
+
+    dist_eq = np.minimum(np.abs(inc), np.abs(180.0 - inc))
+    mask_eq = (dist_eq < _EPS_I_PLOT_DEG)
+
+    # mantém a convenção: em trechos ~equatoriais u é indefinido → ZOH
+    u_plot = _zoh_when_masked(u_mod, mask_eq)
+
 
     fig, axs = plt.subplots(3, 2, figsize=(12, 10))
 
@@ -170,12 +204,15 @@ def plot_classic_orbital_elements(t: np.typing.NDArray, orbital_elementss: list[
     axs[1, 1].grid(True)
     axs[1, 1].legend()
 
-    axs[2, 0].plot(t, w_plot, label='Argument of Perigee', color='purple')
-    axs[2, 0].set_title('Argument of Perigee')
+    # ----- Argument of Latitude (u) -----
+    axs[2, 0].plot(t, u_plot, label='Argument of Latitude (u)', color='purple')
+    axs[2, 0].set_title('Argument of Latitude (u)')
     axs[2, 0].set_xlabel('Time (s)')
-    axs[2, 0].set_ylabel('Argument of Perigee (degrees)')
-    axs[2, 0].grid(True)
-    axs[2, 0].legend()
+    axs[2, 0].set_ylabel('Argument of Latitude (deg)')
+    axs[2, 0].set_ylim(0.0, 360.0)                       # <<< novo
+    axs[2, 0].set_yticks([0, 60, 120, 180, 240, 300, 360])  # <<< novo
+    axs[2, 0].grid(True)                                  # <<< corrigido
+    axs[2, 0].legend()                                    # <<< corrigido
 
     axs[2, 1].plot(t, nu_plot, label='True Anomaly', color='brown')
     axs[2, 1].set_title('True Anomaly')
@@ -198,25 +235,40 @@ def plot_classic_orbital_elements_overlay(*orbital_elementss_lists: list[np.typi
         e_plot = _process_e_for_plot(e)
         Om_plot, w_plot, nu_plot = _process_angles_for_plot(
             inc, Om, w, nu,
-            show_mod360=True,          # <<< ALTERADO: exibe 0–360° sem degrau
+            show_mod360=True,          # exibe 0–360° sem degrau
             use_zoh_on_equatorial=True,
             use_zoh_on_circular=True,
             e_series=e,
             e_eps=_EPS_E_PLOT
         )
+        # --- Argumento de latitude: u = ν + ω ---
+        u_raw = (w + nu) % 360.0
+        N = len(u_raw)
+        win_ang = max(5, (N // _WIN_ANG_SMOOTH_F) | 1)
+
+        u_cont = _contiguous_from_prev(u_raw)
+        u_cont = _rolling_mean(u_cont, win_ang)
+        u_mod  = _to_0_360_no_edge_jump(u_cont)   # <<< NOVO
+        dist_eq = np.minimum(np.abs(inc), np.abs(180.0 - inc))
+        mask_eq = (dist_eq < _EPS_I_PLOT_DEG)
+        u_plot = _zoh_when_masked(u_mod, mask_eq)
+
 
         axs[0, 0].plot(t, a, label=f'Major Axis #{idx+1}')
         axs[0, 1].plot(t, e_plot, label=f'Eccentricity #{idx+1}')
         axs[1, 0].plot(t, inc, label=f'Inclination #{idx+1}')
         axs[1, 1].plot(t, Om_plot, label=f'Ascending Node #{idx+1}')
-        axs[2, 0].plot(t, w_plot, label=f'Argument of Perigee #{idx+1}')
+        axs[2, 0].plot(t, u_plot, label=f'Argument of Latitude (u) #{idx+1}')
         axs[2, 1].plot(t, nu_plot, label=f'True Anomaly #{idx+1}')
 
     axs[0, 0].set_title('Major Axis');      axs[0, 0].set_xlabel('Time (s)'); axs[0, 0].set_ylabel('Major Axis (km)'); axs[0, 0].grid(True); axs[0, 0].legend()
     axs[0, 1].set_title('Eccentricity');    axs[0, 1].set_xlabel('Time (s)'); axs[0, 1].set_ylabel('Eccentricity');     axs[0, 1].grid(True); axs[0, 1].legend()
     axs[1, 0].set_title('Inclination');     axs[1, 0].set_xlabel('Time (s)'); axs[1, 0].set_ylabel('Inclination (deg)');axs[1, 0].grid(True); axs[1, 0].legend()
     axs[1, 1].set_title('Ascending Node');  axs[1, 1].set_xlabel('Time (s)'); axs[1, 1].set_ylabel('Ascending Node (deg)'); axs[1, 1].grid(True); axs[1, 1].legend()
-    axs[2, 0].set_title('Argument of Perigee'); axs[2, 0].set_xlabel('Time (s)'); axs[2, 0].set_ylabel('Argument of Perigee (deg)'); axs[2, 0].grid(True); axs[2, 0].legend()
+    axs[2, 0].set_title('Argument of Latitude (u)'); axs[2, 0].set_xlabel('Time (s)'); axs[2, 0].set_ylabel('Argument of Latitude (deg)');
+    axs[2, 0].set_ylim(0.0, 360.0)                       # <<< novo
+    axs[2, 0].set_yticks([0, 60, 120, 180, 240, 300, 360])  # <<< novo
+    axs[2, 0].grid(True); axs[2, 0].legend()
     axs[2, 1].set_title('True Anomaly');    axs[2, 1].set_xlabel('Time (s)'); axs[2, 1].set_ylabel('True Anomaly (deg)'); axs[2, 1].grid(True); axs[2, 1].legend()
 
     plt.tight_layout()

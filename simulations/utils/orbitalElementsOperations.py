@@ -20,12 +20,41 @@ def _wrap360_deg(th_rad: float) -> float:
 def _atan2(y: float, x: float) -> float:
     return float(np.arctan2(y, x))
 
-# Tolerâncias práticas para degenerescências
-# Tolerâncias práticas para decidir "quase circular/equatorial"
-# Tolerâncias práticas…
-# Tolerâncias práticas para decidir "quase circular/equatorial" no PLOT/elementos
-_EPS_E = 2e-3             # só trata como circular quando e < 0.002
+_EPS_E = 1e-3             # só trata como circular quando e < 0.002
 _EPS_I = np.deg2rad(1e-8) # i muito pequeno => equatorial
+
+
+# ================= helpers de quadro orbital e elementos "circulares" =================
+def _orbital_frame(r: np.ndarray, v: np.ndarray):
+    """
+    Eixos do plano orbital:
+      p̂ ao longo da linha dos nós (ascendente) quando definida,
+      q̂ = ŵ × p̂,
+      ŵ = ĥ.
+    """
+    h = np.cross(r, v); hhat = _safe_unit(h)
+    n = np.cross(Bases.k, h); nnorm = _safe_norm(n)
+    if nnorm > 0.0:
+        p_hat = n / nnorm
+    else:
+        # órbita equatorial → defina p̂ = +x por convenção (Ω := 0)
+        p_hat = Bases.i
+    q_hat = _safe_unit(np.cross(hhat, p_hat))
+    return p_hat, q_hat, hhat, nnorm
+
+def _circular_components(r: np.ndarray, v: np.ndarray, mu: float):
+    """
+    Retorna (e, ex, ey, alpha_v_deg, p̂, q̂, ĥ, nnorm) com:
+      ex = e·cos(ω) = e⃗·p̂,  ey = e·sin(ω) = e⃗·q̂,
+      αᵥ = ν + ω = atan2(r·q̂, r·p̂).
+    """
+    e_vec = get_eccentricity_vector(r, v, mu)
+    e = _safe_norm(e_vec)
+    p_hat, q_hat, hhat, nnorm = _orbital_frame(r, v)
+    ex = float(np.dot(e_vec, p_hat))
+    ey = float(np.dot(e_vec, q_hat))
+    alpha_v = _atan2(np.dot(r, q_hat), np.dot(r, p_hat))
+    return e, ex, ey, _wrap360_deg(alpha_v), p_hat, q_hat, hhat, nnorm
 
 
 # ================= API principal (aceita X ou (r,v)) =================
@@ -52,15 +81,18 @@ def get_orbital_elements(*args) -> OrbitalElements:
         raise TypeError("get_orbital_elements: use (X, mu) ou (r, v, mu)")
 
     a   = get_major_axis(r, v, mu)
-    e   = get_eccentricity(r, v, mu)  # já com snap-to-zero
+    e   = get_eccentricity(r, v, mu)  # com snap-to-zero leve
     inc = get_inclination(r, v, mu)
 
-    # vetores básicos
-    h = np.cross(r, v); hnorm = _safe_norm(h); hhat = _safe_unit(h)
-    n = np.cross(Bases.k, h); nnorm = _safe_norm(n)
+    # componentes circulares e bases do plano orbital
+    e_raw, ex, ey, alpha_v_deg, p_hat, q_hat, hhat, nnorm = _circular_components(r, v, mu)
 
     # RAAN Ω (0 se equatorial)
-    Omega_deg = _wrap360_deg(_atan2(n[1], n[0])) if nnorm > 0.0 else 0.0
+    if nnorm > 0.0:
+        n = np.cross(Bases.k, np.cross(r, v))
+        Omega_deg = _wrap360_deg(_atan2(n[1], n[0]))
+    else:
+        Omega_deg = 0.0
 
     # flags de regime
     i_rad = np.deg2rad(inc)
@@ -68,10 +100,9 @@ def get_orbital_elements(*args) -> OrbitalElements:
     equatorial = (i_rad <= _EPS_I) or (abs(inc - 180.0) <= np.rad2deg(_EPS_I))
 
     if not circular and not equatorial:
-        # elíptica & inclinada: Ω, ω, ν clássicos
-        e_vec = get_eccentricity_vector(r, v, mu)
-        omega_deg = _wrap360_deg(_atan2(np.dot(np.cross(n, e_vec), hhat), np.dot(n, e_vec))) if nnorm > 0.0 else 0.0
-        nu_deg    = _wrap360_deg(_atan2(np.dot(np.cross(e_vec, r), hhat), np.dot(e_vec, r)))
+        # elíptica & inclinada: ω = atan2(ey, ex), ν = αᵥ − ω
+        omega_deg = _wrap360_deg(np.arctan2(ey, ex))
+        nu_deg    = (alpha_v_deg - omega_deg) % 360.0
         return OrbitalElements(
             major_axis=a, eccentricity=e, inclination=inc,
             ascending_node=Omega_deg, argument_of_perigee=omega_deg, true_anomaly=nu_deg
@@ -79,17 +110,17 @@ def get_orbital_elements(*args) -> OrbitalElements:
 
     if circular and not equatorial:
         # circular-inclinada: u no lugar de ν; ω indefinido
-        u_rad = _atan2(np.dot(np.cross(n, r), hhat), np.dot(n, r)) if nnorm > 0.0 else 0.0
         return OrbitalElements(
             major_axis=a, eccentricity=0.0, inclination=inc,
-            ascending_node=Omega_deg, argument_of_perigee=0.0, true_anomaly=_wrap360_deg(u_rad)
+            ascending_node=Omega_deg, argument_of_perigee=0.0, true_anomaly=alpha_v_deg
         )
 
     if (not circular) and equatorial:
-        # elíptica-equatorial: ϖ=atan2(e_y,e_x); Ω indefinido
+        # elíptica-equatorial: ϖ=atan2(ey,ex) e Ω indefinido
+        varpi_deg = _wrap360_deg(np.arctan2(ey, ex))
+        # ν ainda pode ser definido a partir de e⃗
         e_vec = get_eccentricity_vector(r, v, mu)
-        varpi_deg = _wrap360_deg(_atan2(e_vec[1], e_vec[0]))
-        nu_deg    = _wrap360_deg(_atan2(np.dot(np.cross(e_vec, r), hhat), np.dot(e_vec, r)))
+        nu_deg = _wrap360_deg(_atan2(np.dot(np.cross(e_vec, r), hhat), np.dot(e_vec, r)))
         return OrbitalElements(
             major_axis=a, eccentricity=e, inclination=0.0 if inc < 90.0 else 180.0,
             ascending_node=0.0, argument_of_perigee=varpi_deg, true_anomaly=nu_deg
@@ -115,7 +146,7 @@ def get_eccentricity_vector(r: np.typing.NDArray, v: np.typing.NDArray, mu: floa
 
 def get_eccentricity(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
     e = _safe_norm(get_eccentricity_vector(r, v, mu))
-    return 0.0 if e < _EPS_E else e  # snap-to-zero suave
+    return 0.0 if e < _EPS_E else e  # snap-to-zero suave p/ casos quase-circulares
 
 def get_inclination(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
     h = np.cross(r, v)
@@ -134,37 +165,35 @@ def get_ascending_node(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) ->
     return _wrap360_deg(_atan2(n[1], n[0]))
 
 def get_argument_of_perigee(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
-    e_vec = get_eccentricity_vector(r, v, mu); e = _safe_norm(e_vec)
-    if e <= _EPS_E:  # circular → ω indefinido
+    """
+    ω estável:
+      - se e > EPS e não-equatorial: ω = atan2(ey, ex)
+      - caso contrário: 0 (indefinido) — use ϖ fora se precisar
+    """
+    e, ex, ey, _, _, _, _, nnorm = _circular_components(r, v, mu)
+    if e <= _EPS_E or nnorm == 0.0:
         return 0.0
-    h = np.cross(r, v); hhat = _safe_unit(h)
-    n = np.cross(Bases.k, h); nnorm = _safe_norm(n)
-    if nnorm <= 0.0:  # equatorial → usa ϖ externamente
-        return 0.0
-    omega_rad = _atan2(np.dot(np.cross(n, e_vec), hhat), np.dot(n, e_vec))
-    return _wrap360_deg(omega_rad)
+    return _wrap360_deg(np.arctan2(ey, ex))
 
 def get_true_anomaly(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
     """
     Posição angular apropriada:
-      - e>EPS: ν
-      - circular-inclinada: u
-      - circular-equatorial: λ
+      - e>EPS e não-equatorial: ν = αᵥ − ω
+      - circular-inclinada: u  (argumento de latitude)
+      - circular-equatorial: λ  (longitude verdadeira)
     """
-    h = np.cross(r, v); hhat = _safe_unit(h)
-    n = np.cross(Bases.k, h); nnorm = _safe_norm(n)
-    e_vec = get_eccentricity_vector(r, v, mu); e = _safe_norm(e_vec)
+    e, ex, ey, alpha_v_deg, _, _, _, nnorm = _circular_components(r, v, mu)
 
-    if e > _EPS_E:
-        nu = _atan2(np.dot(np.cross(e_vec, r), hhat), np.dot(e_vec, r))
-        return _wrap360_deg(nu)
+    if e > _EPS_E and nnorm > 0.0:
+        omega_deg = _wrap360_deg(np.arctan2(ey, ex))
+        return (alpha_v_deg - omega_deg) % 360.0
 
     if nnorm > 0.0:
-        u = _atan2(np.dot(np.cross(n, r), hhat), np.dot(n, r))
-        return _wrap360_deg(u)
+        # circular-inclinada: use u = αᵥ
+        return alpha_v_deg
 
-    lam = _atan2(r[1], r[0])
-    return _wrap360_deg(lam)
+    # circular-equatorial → λ
+    return _wrap360_deg(_atan2(r[1], r[0]))
 
 def get_period(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
     a = get_major_axis(r, v, mu)
