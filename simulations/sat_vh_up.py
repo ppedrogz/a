@@ -6,8 +6,8 @@ from utils.visualization import plot_classic_orbital_elements
 import matplotlib.patches as mpatches
 
 # ===================== condições iniciais =====================
-r = np.array([2128.5832, -6551.1055, 0.0000])   # km
-v = np.array([-0.932454, -0.302973, 7.548972])
+r = np.array([6877.452, 0.0, 0.0])   # km
+v = np.array([0.0, 5.383, 5.383])
 #r = np.array([6890.3, 0, 0]) #parametro da ITASAT 1
 #v = np.array([0, -0.992,7.535])
 
@@ -135,7 +135,8 @@ def x_dot(t, x):
     else:
         aV = (T_V / m_cur) / 1000.0
         aH = (T_H / m_cur) / 1000.0 if fire_H else 0.0
-        SIGN_H = +1.0  # UP
+        u_deg = get_argument_of_latitude(r_vec, v_vec, mu) 
+        SIGN_H = +np.sign(np.cos(np.deg2rad(u_deg))) 
 
         if u > 0.0:
             xdot[3:6] += aV * s_hat + SIGN_H * aH * w_hat
@@ -257,7 +258,11 @@ if 180.0 in MEAN_THETA_LIST_DEG:
           f"ou {vaF:.9f} km/s (teórico no fim).")
 
 # ---------- plot dos elementos ----------
-plot_classic_orbital_elements(t, orbital_elementss)
+# plot_classic_orbital_elements(t, orbital_elementss)
+
+plot_classic_orbital_elements(t, orbital_elementss, show_mod360=True,
+                              e_series=[el.eccentricity for el in orbital_elementss])
+
 
 # 1) máscara "empuxo H ON"
 thr_H_on_mask = (m_series > m_dry) & fire_mask

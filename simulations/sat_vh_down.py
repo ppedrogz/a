@@ -3,11 +3,13 @@ from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 from utils.orbitalElementsOperations import *
 from utils.visualization import plot_classic_orbital_elements
+from utils.visualization import _process_angles_for_plot, _WIN_ANG_SMOOTH_F, _EPS_I_PLOT_DEG
+
 import matplotlib.patches as mpatches
 
 # ===================== condições iniciais =====================
-r = np.array([2128.5832, -6551.1055, 0.0000])   # km
-v = np.array([-0.932454, -0.302973, 7.548972])
+r = np.array([6877.452, 0.0, 0.0])   # km
+v = np.array([0.0, 5.383, 5.383])
 #r= np.array([6890.3, 0, 0]) #parametro da ITASAT 1
 #v=np.array([0, -0.992,7.535])
 
@@ -137,7 +139,8 @@ def x_dot(t, x):
     else:
         aV = (T_V / m_cur) / 1000.0
         aH = (T_H / m_cur) / 1000.0 if fire_H else 0.0
-        SIGN_H = -1.0  # UP
+        u_deg = get_argument_of_latitude(r_vec, v_vec, mu) 
+        SIGN_H = -np.sign(np.cos(np.deg2rad(u_deg))) 
 
         if u > 0.0:
             xdot[3:6] += aV * s_hat + SIGN_H * aH * w_hat
@@ -259,7 +262,13 @@ if 180.0 in MEAN_THETA_LIST_DEG:
           f"ou {vaF:.9f} km/s (teórico no fim).")
 
 # ---------- plot dos elementos ----------
-plot_classic_orbital_elements(t, orbital_elementss)
+
+# plot_classic_orbital_elements(t, orbital_elementss)
+
+plot_classic_orbital_elements(t, orbital_elementss, show_mod360=False,
+                              e_series=[el.eccentricity for el in orbital_elementss])
+
+
 
 # 1) máscara "empuxo H ON"
 thr_H_on_mask = (m_series > m_dry) & fire_mask
@@ -285,16 +294,27 @@ def add_thrust_spans(ax, tarr, mask_bool, *, color="tab:orange", alpha=0.15, lab
 def _unwrap_deg(a_deg):
     return np.degrees(np.unwrap(np.radians(np.asarray(a_deg, float))))
 
-Omega_series = [el.ascending_node for el in orbital_elementss]
-Omega_unw = _unwrap_deg(Omega_series)
+# ---------- RAAN diagnóstico (mesmo pipeline do visualization) ----------
+# ---------- RAAN diagnóstico (mesmo pipeline do visualization) ----------
+Om_series = np.array([el.ascending_node for el in orbital_elementss], float)  # em graus
+
+# Processa Ω com o mesmo pipeline: unwrap + média + ZOH (~equatorial) + mod 360
+Om_plot, _, _ = _process_angles_for_plot(
+    incs_deg, Om_series, np.zeros_like(Om_series), np.zeros_like(Om_series),
+    show_mod360=False,              # <<< não modular
+    use_zoh_on_equatorial=True,
+    use_zoh_on_circular=False,
+    e_series=None
+)
+
 
 t_plot = t/86400.0  # dias
 fig, ax = plt.subplots()
-ax.plot(t_plot, Omega_unw, 'r-', lw=1.2, label='Ω (desenrolado)')
+ax.plot(t_plot, Om_plot, 'r-', lw=1.2, label='Ω (processado)')
 add_thrust_spans(ax, t_plot, thr_H_on_mask, color="tab:orange", alpha=0.18, label="Empuxo H ON")
 ax.set_xlabel("Tempo [dias]"); ax.set_ylabel("Ω [graus]")
-ax.set_title("RAAN com janelas de empuxo H destacadas")
-ax.grid(True); plt.show()
+ax.set_title("RAAN (Ω) com janelas de empuxo H — pipeline processado")
+ax.grid(True); ax.legend(); plt.show()
 
 # ---------- plot 3D ----------
 fig = plt.figure()
