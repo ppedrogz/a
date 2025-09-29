@@ -197,13 +197,12 @@ def plot_classic_orbital_elements(t: np.typing.NDArray, orbital_elementss: list[
     axs[1, 0].grid(True)
     axs[1, 0].legend()
 
-    axs[1, 1].plot(t, Om_plot, label='Ascending Node', color='red')
+    axs[1, 1].plot(t, [element.ascending_node for element in orbital_elementss], label='Ascending Node')
     axs[1, 1].set_title('Ascending Node')
     axs[1, 1].set_xlabel('Time (s)')
     axs[1, 1].set_ylabel('Ascending Node (degrees)')
     axs[1, 1].grid(True)
     axs[1, 1].legend()
-
     # ----- Argument of Latitude (u) -----
     axs[2, 0].plot(t, u_plot, label='Argument of Latitude (u)', color='purple')
     axs[2, 0].set_title('Argument of Latitude (u)')

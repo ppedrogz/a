@@ -159,10 +159,19 @@ def get_inclination(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> fl
     return i_deg
 
 def get_ascending_node(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
-    h = np.cross(r, v); n = np.cross(Bases.k, h)
-    if _safe_norm(n) <= 0.0:
-        return 0.0
-    return _wrap360_deg(_atan2(n[1], n[0]))
+    h = np.cross(r, v)
+    n = np.cross(Bases.k, h)
+
+    if np.linalg.norm(n) > 1e-10:
+        Omega_rad = np.acos(np.dot(Bases.i, n)/np.linalg.norm(n))
+        if n[1] < 0:
+            Omega_rad = 2*np.pi - Omega_rad
+    else:
+        Omega_rad = 0
+
+    Omega = np.rad2deg(Omega_rad)
+
+    return Omega
 
 def get_argument_of_perigee(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
     """
