@@ -38,7 +38,7 @@ def _accel_J2(r_vec, v_vec, tval):
     return 0.0 * r_vec
 
 from Drag import accel_drag, DragParams
-_DRAG_ON = True
+_DRAG_ON = False
 _DRAG = DragParams(Cd=2.2, A_ref_m2=0.02, use_atmo_rotation=True,
                    rho0_kg_m3=3.614e-11, h0_km=200.0, H_km=50.0)
 

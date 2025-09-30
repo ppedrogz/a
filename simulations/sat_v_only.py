@@ -17,7 +17,7 @@ v = np.array([0.0, 5.383, 5.383])
 # r = np.array([10016.34, -17012.52, 7899.28])    # Exemplo genérico elíptico
 # v = np.array([2.5, -1.05, 3.88])
 
-t = np.linspace(0, 432000, 100000)  # 12 h (comentário antigo dizia 5 dias)
+t = np.linspace(0, 43200, 10000)  # 12 h (comentário antigo dizia 5 dias)
 earth_radius = 6378.0  # km
 mu = 3.986e5           # km^3/s^2
 thrust = 1.1e-3        # N (força fixa)
@@ -45,7 +45,7 @@ def _accel_J2(r_vec, v_vec, t):
 
 # Perturbação de arrasto atmosférico
 from Drag import accel_drag, DragParams
-_DRAG_ON = True
+_DRAG_ON = False
 _DRAG = DragParams(Cd=2.2, A_ref_m2=0.02, use_atmo_rotation=True,
                    rho0_kg_m3=3.614e-11, h0_km=200.0, H_km=50.0)
 
