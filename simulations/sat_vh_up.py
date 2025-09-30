@@ -13,12 +13,12 @@ v= np.array([0.0, 5.383, 5.383])
 #v = np.array([-0.932454, -0.302973, 7.548972])
 #r = np.array([10016.34, -17012.52, 7899.28]) parametros orbitais iniciais
 #v = np.array([2.5, -1.05, 3.88])
-t = np.linspace(0, 432000, 1000000)  # 5 dias, 100k pontos
+t = np.linspace(0, 43200, 100000)  # 5 dias, 100k pontos
 earth_radius = 6378.0  # km
 mu = 3.986e5
 
 # ===================== Dados de propulsão =====================
-T   = 1.1e-3       # N
+T   = 1.1e-2      # N
 Isp = 2150.0       # s
 g0  = 9.80665      # m/s^2
 m0  = 20.0         # kg

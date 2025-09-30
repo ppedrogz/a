@@ -31,7 +31,7 @@ m_dry = 15.0   # kg
 from J2 import external_accel, EarthParams, PerturbationFlags
 
 # Flag de módulo para ligar/desligar J2 (não mexe no resto do código)
-_J2_ON = True
+_J2_ON = False
 
 def _accel_J2(r_vec, v_vec, t):
     if _J2_ON:

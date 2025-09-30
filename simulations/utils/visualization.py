@@ -146,38 +146,68 @@ def _plot_wrapped(ax, t, y_deg, **plot_kw):
         start = c + 1
     ax.plot(t[start:], y[start:], **plot_kw)
 
-def plot_classic_orbital_elements(t: np.typing.NDArray, orbital_elementss: list[OrbitalElements]):
+def plot_classic_orbital_elements(
+    t: np.typing.NDArray,
+    orbital_elementss: list[OrbitalElements],
+    *,
+    show_mod360: bool = False,                 # <<< contínuo por padrão (sem 0–360)
+    e_series: np.ndarray | None = None,
+    e_eps: float = _EPS_E_PLOT,
+    use_zoh_on_equatorial: bool = True,
+    use_zoh_on_circular: bool = True,
+    # --- controles de exibição do RAAN (sugestão da professora) ---
+    raan_zero_at_start: bool = True,           # força Ω(t0)=0 na exibição
+    raan_deadband_deg: float = 0.0,            # zera |ΔΩ| < limiar visual (ex.: 0.01)
+    raan_window_deg: float | None = None       # fixa ylim em ±valor ao redor de 0
+):
+    # séries brutas
     a, e, inc, Om, w, nu = _series_from(orbital_elementss)
     e_plot = _process_e_for_plot(e)
+
+    # ângulos processados (unwrap + suavização + ZOH)
     Om_plot, w_plot, nu_plot = _process_angles_for_plot(
         inc, Om, w, nu,
-        show_mod360=True,              # exibe 0–360° sem degrau
-        use_zoh_on_equatorial=True,
-        use_zoh_on_circular=True,
-        e_series=e,
-        e_eps=_EPS_E_PLOT
+        show_mod360=show_mod360,
+        use_zoh_on_equatorial=use_zoh_on_equatorial,
+        use_zoh_on_circular=use_zoh_on_circular,
+        e_series=(e if e_series is None else np.asarray(e_series, float)),
+        e_eps=e_eps
     )
-    # --- Argumento de latitude: u = ν + ω ---
-    # usa pipeline idêntico: contiguous -> suavização -> ZOH em equatorial
+
+    # ---------- Argumento de latitude: u = ν + ω ----------
+    # usa mesmo pipeline: unwrap -> suavização -> ZOH (~equatorial)
     u_raw = (w + nu) % 360.0
     N = len(u_raw)
     win_ang = max(5, (N // _WIN_ANG_SMOOTH_F) | 1)
 
     u_cont = _contiguous_from_prev(u_raw)
     u_cont = _rolling_mean(u_cont, win_ang)
-
-    # <<< NOVO: traz de volta para [0, 360) sem “dente” na borda
     u_mod  = _to_0_360_no_edge_jump(u_cont)
 
     dist_eq = np.minimum(np.abs(inc), np.abs(180.0 - inc))
     mask_eq = (dist_eq < _EPS_I_PLOT_DEG)
+    u_plot  = _zoh_when_masked(u_mod, mask_eq)
 
-    # mantém a convenção: em trechos ~equatoriais u é indefinido → ZOH
-    u_plot = _zoh_when_masked(u_mod, mask_eq)
+    # ---------- pós-processamento específico do RAAN p/ exibição ----------
+    Om_disp = Om_plot.copy()
+    if not show_mod360:
+        # série contínua; exibir variação relativa a t0 se pedido
+        if raan_zero_at_start and Om_disp.size:
+            Om_disp = Om_disp - Om_disp[0]
+    else:
+        # versão 0–360: ainda dá para recentrar por ΔΩ mod 360 se quiser
+        if raan_zero_at_start and Om_disp.size:
+            Om0 = Om_disp[0]
+            Om_disp = (Om_disp - Om0) % 360.0
 
+    # deadband visual (mata ruído minúsculo)
+    if raan_deadband_deg > 0.0:
+        Om_disp = np.where(np.abs(Om_disp) < raan_deadband_deg, 0.0, Om_disp)
 
+    # ------------------ plots ------------------
     fig, axs = plt.subplots(3, 2, figsize=(12, 10))
 
+    # a
     axs[0, 0].plot(t, a, label='Major Axis')
     axs[0, 0].set_title('Major Axis')
     axs[0, 0].set_xlabel('Time (s)')
@@ -185,6 +215,7 @@ def plot_classic_orbital_elements(t: np.typing.NDArray, orbital_elementss: list[
     axs[0, 0].grid(True)
     axs[0, 0].legend()
 
+    # e
     axs[0, 1].plot(t, e_plot, label='Eccentricity', color='orange')
     axs[0, 1].set_title('Eccentricity')
     axs[0, 1].set_xlabel('Time (s)')
@@ -192,6 +223,7 @@ def plot_classic_orbital_elements(t: np.typing.NDArray, orbital_elementss: list[
     axs[0, 1].grid(True)
     axs[0, 1].legend()
 
+    # i
     axs[1, 0].plot(t, inc, label='Inclination', color='green')
     axs[1, 0].set_title('Inclination')
     axs[1, 0].set_xlabel('Time (s)')
@@ -199,20 +231,27 @@ def plot_classic_orbital_elements(t: np.typing.NDArray, orbital_elementss: list[
     axs[1, 0].grid(True)
     axs[1, 0].legend()
 
-    axs[1, 1].plot(t, [element.ascending_node for element in orbital_elementss], label='Ascending Node')
-    axs[1, 1].set_title('Ascending Node')
+    # Ω — agora usando a série processada e com os novos controles de exibição
+    axs[1, 1].plot(t, Om_disp, label='Ascending Node (RAAN)')
+    axs[1, 1].set_title('Ascending Node (RAAN)')
     axs[1, 1].set_xlabel('Time (s)')
     axs[1, 1].set_ylabel('Ascending Node (degrees)')
     axs[1, 1].grid(True)
     axs[1, 1].legend()
-    # ----- Argument of Latitude (u) -----
-    axs[2, 0].plot(t, [element.argument_of_latitude for element in orbital_elementss], label='Argument of Latitude')
-    axs[2, 0].set_title('Argument of Latitude')
-    axs[2, 0].set_xlabel('Time (s)')
-    axs[2, 0].set_ylabel('Argument of Latitude (degrees)')
-    axs[2, 0].grid(True)
-    axs[2, 0].legend()                               # <<< corrigido
+    if raan_zero_at_start and (raan_window_deg is not None):
+        axs[1, 1].set_ylim(-raan_window_deg, +raan_window_deg)
 
+    # u
+    axs[2, 0].plot(t, u_plot, label='Argument of Latitude (u)', color='purple')
+    axs[2, 0].set_title('Argument of Latitude (u)')
+    axs[2, 0].set_xlabel('Time (s)')
+    axs[2, 0].set_ylabel('Argument of Latitude (deg)')
+    axs[2, 0].set_ylim(0.0, 360.0)
+    axs[2, 0].set_yticks([0, 60, 120, 180, 240, 300, 360])
+    axs[2, 0].grid(True)
+    axs[2, 0].legend()
+
+    # ν — processado (contínuo por padrão)
     axs[2, 1].plot(t, nu_plot, label='True Anomaly', color='brown')
     axs[2, 1].set_title('True Anomaly')
     axs[2, 1].set_xlabel('Time (s)')
