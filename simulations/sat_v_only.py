@@ -1,8 +1,8 @@
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
-from utils.GetClassicOrbitalElements import *
-from utils.visualization import plot_classic_orbital_elements
+from simulations.utils.GetClassicOrbitalElements import *
+from simulations.utils.visualization import plot_classic_orbital_elements
 
 # ===================== condições iniciais =====================
 r = np.array([10016.34, -17012.52, 7899.28]) #eliptico parametros orbitais iniciais
