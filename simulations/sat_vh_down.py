@@ -265,8 +265,7 @@ if 180.0 in MEAN_THETA_LIST_DEG:
 
 # plot_classic_orbital_elements(t, orbital_elementss)
 
-plot_classic_orbital_elements(t, orbital_elementss, show_mod360=False,
-                              e_series=[el.eccentricity for el in orbital_elementss])
+plot_classic_orbital_elements(t, orbital_elementss)                           
 
 
 

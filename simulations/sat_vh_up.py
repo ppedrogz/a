@@ -1,15 +1,17 @@
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
-from utils.orbitalElementsOperations import*
+from utils.orbitalElementsOperations import *
 from utils.visualization import plot_classic_orbital_elements
+from utils.visualization import _process_angles_for_plot, _WIN_ANG_SMOOTH_F, _EPS_I_PLOT_DEG
+
 import matplotlib.patches as mpatches
 
 # ===================== condições iniciais =====================
 r = np.array([6877.452, 0.0, 0.0])   # km
 v = np.array([0.0, 5.383, 5.383])
-#r = np.array([6890.3, 0, 0]) #parametro da ITASAT 1
-#v = np.array([0, -0.992,7.535])
+#r= np.array([6890.3, 0, 0]) #parametro da ITASAT 1
+#v=np.array([0, -0.992,7.535])
 
 #r = np.array([10016.34, -17012.52, 7899.28]) parametros orbitais iniciais
 #v = np.array([2.5, -1.05, 3.88])
@@ -48,6 +50,7 @@ def _accel_DRAG(r_vec, v_vec, m_cur):
     return accel_drag(r_vec, v_vec, m_cur, _DRAG) if _DRAG_ON else 0.0 * r_vec
 
 
+
 # ===================== Dois motores independentes (V e H) =====================
 DUAL_THRUSTERS = True
 THRUST_MODE = "sum"  # "sum" ou "split"
@@ -63,7 +66,7 @@ if DUAL_THRUSTERS:
 
 # ===================== Janelas em anomalia verdadeira =====================
 THRUST_INTERVAL_DEG = 30.0
-MEAN_THETA_LIST_DEG = [180.0]  # 180 apogeu - 0 perigeu
+MEAN_THETA_LIST_DEG = [180]  # 180 apogeu - 0 perigeu
 
 def throttle(t, x):
     # Se não há empuxo, nunca liga
@@ -71,6 +74,7 @@ def throttle(t, x):
         return 0.0
     else:
         return 1.0 if x[6] > m_dry else 0.0
+
 
 def wrap_deg(a):
     return np.remainder(a, 360.0)
@@ -242,7 +246,7 @@ arg = np.clip((dv_H_kms) / (2.0 * v_ref), -1.0, 1.0)  # dv_H_kms está em km/s
 delta_i_ideal_deg = float(np.degrees(2.0*np.arcsin(arg)))
 delta_i_sim_deg = incs_deg - incs_deg[0]
 
-print("\n=== Dados V H UP ===")
+print("\n=== Dados V H UP===")
 print(f"Tempo com H ligado (s):     {t_H_on:.6f}")
 print(f"Δv_V     (m/s):             {dv_V_ms:.6f}")
 print(f"Δv_H     (m/s):             {dv_H_ms:.6f}")
@@ -258,10 +262,11 @@ if 180.0 in MEAN_THETA_LIST_DEG:
           f"ou {vaF:.9f} km/s (teórico no fim).")
 
 # ---------- plot dos elementos ----------
+
 # plot_classic_orbital_elements(t, orbital_elementss)
 
-plot_classic_orbital_elements(t, orbital_elementss, show_mod360=True,
-                              e_series=[el.eccentricity for el in orbital_elementss])
+plot_classic_orbital_elements(t, orbital_elementss)                           
+
 
 
 # 1) máscara "empuxo H ON"
@@ -288,16 +293,27 @@ def add_thrust_spans(ax, tarr, mask_bool, *, color="tab:orange", alpha=0.15, lab
 def _unwrap_deg(a_deg):
     return np.degrees(np.unwrap(np.radians(np.asarray(a_deg, float))))
 
-Omega_series = [el.ascending_node for el in orbital_elementss]
-Omega_unw = _unwrap_deg(Omega_series)
+# ---------- RAAN diagnóstico (mesmo pipeline do visualization) ----------
+# ---------- RAAN diagnóstico (mesmo pipeline do visualization) ----------
+Om_series = np.array([el.ascending_node for el in orbital_elementss], float)  # em graus
+
+# Processa Ω com o mesmo pipeline: unwrap + média + ZOH (~equatorial) + mod 360
+Om_plot, _, _ = _process_angles_for_plot(
+    incs_deg, Om_series, np.zeros_like(Om_series), np.zeros_like(Om_series),
+    show_mod360=False,              # <<< não modular
+    use_zoh_on_equatorial=True,
+    use_zoh_on_circular=False,
+    e_series=None
+)
+
 
 t_plot = t/86400.0  # dias
 fig, ax = plt.subplots()
-ax.plot(t_plot, Omega_unw, 'r-', lw=1.2, label='Ω (desenrolado)')
+ax.plot(t_plot, Om_plot, 'r-', lw=1.2, label='Ω (processado)')
 add_thrust_spans(ax, t_plot, thr_H_on_mask, color="tab:orange", alpha=0.18, label="Empuxo H ON")
 ax.set_xlabel("Tempo [dias]"); ax.set_ylabel("Ω [graus]")
-ax.set_title("RAAN com janelas de empuxo H destacadas")
-ax.grid(True); plt.show()
+ax.set_title("RAAN (Ω) com janelas de empuxo H — pipeline processado")
+ax.grid(True); ax.legend(); plt.show()
 
 # ---------- plot 3D ----------
 fig = plt.figure()
@@ -309,7 +325,7 @@ z_e = earth_radius * np.cos(v_grid)
 ax.plot_wireframe(x_e, y_e, z_e, color="g", alpha=0.3)
 ax.plot3D(X[0, :], X[1, :], X[2, :], 'r', label="Satélite V_H UP")
 ax.set_box_aspect([1, 1, 1])
-ax.set_title("Órbita simulada - Satélite V_H UP")
+ax.set_title("Órbita simulada - Satélite V_H DOWN")
 ax.legend()
 ax.axis('equal')
 

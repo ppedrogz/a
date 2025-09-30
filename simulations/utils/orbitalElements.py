@@ -183,6 +183,14 @@ def get_period(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
     a = get_major_axis(r, v, mu)
     return 2.0*np.pi*np.sqrt(abs(a**3)/mu) if np.isfinite(a) else np.inf
 
+def get_argument_of_latitude(r: np.typing.NDArray, v: np.typing.NDArray, mu: float) -> float:
+    h = np.cross(r, v); hhat = _safe_unit(h)
+    n = np.cross(Bases.k, h); nnorm = _safe_norm(n)
+    if nnorm <= 0.0:
+        return _wrap360_deg(_atan2(r[1], r[0]))  # λ
+    u = _atan2(np.dot(np.cross(n, r), hhat), np.dot(n, r))
+    return _wrap360_deg(u)
+
 # KEPLERIAN ELEMENTS
 def get_eccentric_anomaly(theta, e) -> float:
     E_sin = np.sqrt(1-e**2)*np.sin(theta)
