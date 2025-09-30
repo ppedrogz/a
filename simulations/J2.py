@@ -65,27 +65,85 @@ def accel_perturbations(r_vec: np.ndarray,
     return a
 
 # ========================= True anomaly robusta (sem "dentes") =========================
+# ========================= True anomaly robusta (sem "dentes") =========================
+_EPS_E = 1e-5     # circularidade (adapte se quiser)
+_EPS_I = np.deg2rad(1e-3)  # equatorial (~0.001 deg)
+
+def _safe_norm(x):
+    n = np.linalg.norm(x)
+    return n if n > 1e-32 else 1e-32
+
+def _argument_of_latitude_deg(r: np.ndarray, v: np.ndarray) -> float:
+    """
+    u = arg(latitude): se equatorial (i≈0), retorna longitude verdadeira ℓ_true = atan2(y,x).
+    """
+    r = np.asarray(r, float); v = np.asarray(v, float)
+    h = np.cross(r, v); H = _safe_norm(h)
+    k = np.array([0.0, 0.0, 1.0])
+    n = np.cross(k, h); N = np.linalg.norm(n)
+
+    # inclinação para decidir equatorial
+    i = np.arccos(np.clip(h[2]/H, -1.0, 1.0))
+    if (i <= _EPS_I) or (N < 1e-14):
+        # equatorial -> longitude verdadeira
+        return float(np.degrees(np.arctan2(r[1], r[0])) % 360.0)
+
+    # caso geral (não equatorial): u = angle(n, r)
+    R = _safe_norm(r)
+    cosu = np.dot(n, r)/(N*R)
+    sinu = np.dot(np.cross(n, r), h)/(N*R*H)
+    u = np.degrees(np.arctan2(sinu, np.clip(cosu, -1.0, 1.0)))
+    return float(u % 360.0)
+
 def true_anomaly_deg_from_rv(r: np.ndarray, v: np.ndarray, mu: float) -> float:
     """
-    Anomalia verdadeira 0–360° usando arctan2(sin nu, cos nu), evitando saltos
-    359→0 e ambiguidade de quadrante. Implementada com seu get_eccentricity_vector().
+    Retorna:
+      - ν (0–360°) quando e ≳ _EPS_E
+      - u (0–360°) quando e ≲ _EPS_E (ou ℓ_true se i≈0)
+    Isso evita instabilidades para e→0.
     """
     r = np.asarray(r, dtype=float); v = np.asarray(v, dtype=float)
-    R = np.linalg.norm(r) + 1e-32
+    R = _safe_norm(r)
+    h = np.cross(r, v); H = _safe_norm(h)
 
-    h = np.cross(r, v); H = np.linalg.norm(h) + 1e-32
-    e_vec = get_eccentricity_vector(r, v, mu); e = np.linalg.norm(e_vec) + 1e-32
+    # vetor de excentricidade
+    e_vec = (np.cross(v, h)/mu) - r/R
+    e = np.linalg.norm(e_vec)
 
-    # cos(nu) e sin(nu)
+    if e < _EPS_E:
+        # usar u/ℓ_true
+        return _argument_of_latitude_deg(r, v)
+
+    # ν clássico via atan2 (robusto de quadrante)
     cos_nu = np.dot(e_vec, r) / (e * R)
     cos_nu = np.clip(cos_nu, -1.0, 1.0)
-    # sin(nu) = (h · (r × e)) / (H e R)
     sin_nu = np.dot(h, np.cross(r, e_vec)) / (H * e * R)
-
     nu = np.degrees(np.arctan2(sin_nu, cos_nu))
-    if nu < 0.0:
-        nu += 360.0
+    if nu < 0.0: nu += 360.0
     return float(nu)
+
+def raan_preferential_deg(r: np.ndarray, v: np.ndarray, mu: float) -> float:
+    """
+    Ω_preferencial:
+      - se i ≳ _EPS_I: Ω clássico (atan2(n_y, n_x))
+      - se i ≲ _EPS_I: usa Ω ≈ ℓ_true - u  (sempre definido e contínuo)
+    """
+    r = np.asarray(r, float); v = np.asarray(v, float)
+    h = np.cross(r, v); H = _safe_norm(h)
+    k = np.array([0.0, 0.0, 1.0])
+    n = np.cross(k, h); N = np.linalg.norm(n)
+    i = np.arccos(np.clip(h[2]/H, -1.0, 1.0))
+
+    if (i > _EPS_I) and (N >= 1e-14):
+        Om = np.degrees(np.arctan2(n[1], n[0]))
+        return float(Om if Om >= 0.0 else Om + 360.0)
+
+    # i≈0 → Ω ≈ ℓ_true - u
+    l_true = float(np.degrees(np.arctan2(r[1], r[0])) % 360.0)
+    u_deg  = _argument_of_latitude_deg(r, v)
+    Om_pref = (l_true - u_deg) % 360.0
+    return float(Om_pref)
+
 
 def series_nu_i_deg(t: np.ndarray, X: np.ndarray, mu: float) -> Tuple[np.ndarray, np.ndarray]:
     """
@@ -122,16 +180,22 @@ def diagnose_orbital_changes(t: np.ndarray,
     r_all = X[0:3, :].T
     v_all = X[3:6, :].T
 
-    e0 = get_orbital_elements(r_all[0],   v_all[0],   mu)
-    eF = get_orbital_elements(r_all[-1],  v_all[-1],  mu)
+    # Elementos “preferenciais” para impressão
+    Om0 = raan_preferential_deg(r_all[0],  v_all[0],  mu)
+    OmF = raan_preferential_deg(r_all[-1], v_all[-1], mu)
+
+    # ω é indefinido para e≈0; vamos proteger a impressão
+    def _argp_safe(el) -> float | None:
+        return el.argument_of_perigee if el.eccentricity > 1e-5 else None
 
     if print_samples:
         print(f"\n=== {label}: elementos iniciais ===")
         print(f"a0 [km] = {e0.major_axis:.6f} | e0 = {e0.eccentricity:.9f} | i0 [deg] = {e0.inclination:.6f} | "
-              f"RAAN0 [deg] = {e0.ascending_node:.6f} | ω0 [deg] = {e0.argument_of_perigee:.6f}")
+              f"RAAN0 [deg] = {Om0:.6f} | ω0 [deg] = {(_argp_safe(e0) if _argp_safe(e0) is not None else '—')}")
         print(f"=== {label}: elementos finais ===")
         print(f"aF [km] = {eF.major_axis:.6f} | eF = {eF.eccentricity:.9f} | iF [deg] = {eF.inclination:.6f} | "
-              f"RAANF [deg] = {eF.ascending_node:.6f} | ωF [deg] = {eF.argument_of_perigee:.6f}")
+              f"RAANF [deg] = {OmF:.6f} | ωF [deg] = {(_argp_safe(eF) if _argp_safe(eF) is not None else '—')}")
+
 
     # deltas e taxas
     dt_tot = float(t[-1] - t[0]); days = dt_tot/86400.0 if dt_tot>0 else 0.0
@@ -142,15 +206,22 @@ def diagnose_orbital_changes(t: np.ndarray,
     d_a    = eF.major_axis       - e0.major_axis
     d_e    = eF.eccentricity     - e0.eccentricity
     d_i    = eF.inclination      - e0.inclination
-    d_RAAN = wrap_deg_diff(eF.ascending_node,     e0.ascending_node)
-    d_argp = wrap_deg_diff(eF.argument_of_perigee, e0.argument_of_perigee)
+    d_RAAN = wrap_deg_diff(OmF, Om0)
+
+    # ω: reporte só se bem-definido
+    if (e0.eccentricity > 1e-5) and (eF.eccentricity > 1e-5):
+        d_argp = wrap_deg_diff(eF.argument_of_perigee, e0.argument_of_perigee)
+        argp_rate = d_argp/days if days>0 else 0.0
+        print(f"Δω [deg]  = {d_argp:.9f}  |  ω̇ [deg/dia] ≈ {argp_rate:.9f}")
+    else:
+        print(f"Δω [deg]  = — (órbita ~circular)")
 
     print(f"\n--- {label}: variações (final - inicial) ---")
     print(f"Δa [km]   = {d_a:.6f}")
     print(f"Δe        = {d_e:.9f}")
     print(f"Δi [deg]  = {d_i:.9f}")
     print(f"ΔΩ [deg]  = {d_RAAN:.9f}  |  Ω̇ [deg/dia] ≈ {(d_RAAN/days if days>0 else 0.0):.9f}")
-    print(f"Δω [deg]  = {d_argp:.9f}  |  ω̇ [deg/dia] ≈ {(d_argp/days if days>0 else 0.0):.9f}")
+
 
     # estimativa secular J2 (com elementos médios)
     a_bar = 0.5*(e0.major_axis + eF.major_axis)
