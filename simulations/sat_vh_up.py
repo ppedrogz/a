@@ -6,11 +6,8 @@ from utils.visualization import plot_classic_orbital_elements
 import matplotlib.patches as mpatches
 
 # ===================== condições iniciais =====================
-r = np.array([6890.3, 0, 0]) #parametro da ITASAT 1
-v = np.array([0, -0.992,7.535])
-
-#r = np.array([10016.34, -17012.52, 7899.28]) parametros orbitais iniciais
-#v = np.array([2.5, -1.05, 3.88])
+r = np.array([10016.34, -17012.52, 7899.28]) #eliptico parametros orbitais iniciais
+v = np.array([2.5, -1.05, 3.88])
 t = np.linspace(0, 432000, 100000)  # 5 dias, 100k pontos
 earth_radius = 6378.0  # km
 mu = 3.986e5
@@ -45,54 +42,6 @@ _DRAG = DragParams(Cd=2.2, A_ref_m2=0.02, use_atmo_rotation=True,
 def _accel_DRAG(r_vec, v_vec, m_cur):
     return accel_drag(r_vec, v_vec, m_cur, _DRAG) if _DRAG_ON else 0.0 * r_vec
 
-
-# ===================== helpers gerais =====================
-def _R3(angle):
-    c, s = np.cos(angle), np.sin(angle)
-    return np.array([[ c, -s, 0.0],
-                     [ s,  c, 0.0],
-                     [0.0, 0.0, 1.0]])
-
-def _R1(angle):
-    c, s = np.cos(angle), np.sin(angle)
-    return np.array([[1.0, 0.0, 0.0],
-                     [0.0,  c, -s ],
-                     [0.0,  s,  c ]])
-
-def _coe_to_rv(a, e, i_deg, raan_deg, argp_deg, nu_deg, mu):
-    i  = np.deg2rad(i_deg)
-    O  = np.deg2rad(raan_deg)   # RAAN (Ω)
-    w  = np.deg2rad(argp_deg)   # perigeu (ω)
-    nu = np.deg2rad(nu_deg)     # anomalia verdadeira (ν)
-
-    p = a * (1.0 - e**2)
-
-    r_pqw = np.array([
-        p * np.cos(nu) / (1.0 + e*np.cos(nu)),
-        p * np.sin(nu) / (1.0 + e*np.cos(nu)),
-        0.0
-    ])
-    v_pqw = np.array([
-        -np.sqrt(mu/p) * np.sin(nu),
-        +np.sqrt(mu/p) * (e + np.cos(nu)),
-        0.0
-    ])
-
-    C = _R3(O) @ _R1(i) @ _R3(w)
-    return C @ r_pqw, C @ v_pqw
-
-def reseed_state_with_inclination(r, v, mu, i_target_deg):
-    a0  = get_major_axis(r, v, mu)
-    e0  = get_eccentricity(r, v, mu)
-    O0  = get_ascending_node(r, v, mu)
-    w0  = get_argument_of_perigee(r, v, mu)
-    nu0 = get_true_anormaly(r, v, mu)   # [0,360)
-    return _coe_to_rv(a0, e0, i_target_deg, O0, w0, nu0, mu)
-
-# ======== alvo de inclinação inicial (em graus) ========
-I0_TARGET_DEG = 97.5
-r, v = reseed_state_with_inclination(r, v, mu, I0_TARGET_DEG)
-print(f"[check] i0 = {get_inclination(r, v, mu):.6f} deg")
 
 # ===================== Dois motores independentes (V e H) =====================
 DUAL_THRUSTERS = True
