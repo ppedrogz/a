@@ -26,16 +26,47 @@ g0  = 9.80665      # m/s^2
 m0  = 20.0         # kg (inicial)
 m_dry = 15.0       # kg (massa seca)
 
-# ===================== Perturbações (J2 + Arrasto) =====================
-from J2 import external_accel, EarthParams, PerturbationFlags
-_J2_ON = False
 
-def _accel_J2(r_vec, v_vec, tval):
-    if _J2_ON:
-        return external_accel(r_vec, v_vec, tval,
-                              params=EarthParams(),
-                              flags=PerturbationFlags(j2=True))
-    return 0.0 * r_vec
+# ===================== Achatamento (J2 e J22 do ar_prs) =====================
+from achatamento import (
+    EarthShapeParams as ShapeParams,
+    accel_achatamento_total,
+)
+_USE_J2  = True
+_USE_J22 = False            # ligue para testar
+_GAMMA   = 7.2921150e-5     # rad/s, rotação da Terra em ECI (tesseral “gira”)
+LAMBDA22_DEG = -14.79 # lambdat = gamma * t (rad) 
+_SHAPE   = ShapeParams()  # μ, Re, J2, J22
+
+# Ângulos do termo tesseral J22 (iguais ao .for)
+LAMBDA22_RAD = np.deg2rad(LAMBDA22_DEG)
+
+def _lambdat_rad(tval: float) -> float:
+    return _GAMMA * float(tval)
+
+def _accel_achatamento(r_vec: np.ndarray, tval: float) -> np.ndarray:
+    """
+    Aceleração de achatamento (J2 + opcional J22) conforme ar_prs.
+    r_vec em km, saída em km/s^2, frame equatorial inercial (z || spin da Terra).
+    """
+    return accel_achatamento_total(
+        r_vec, _SHAPE,
+        lambdat_rad=_lambdat_rad(tval),
+        lambda22_rad=LAMBDA22_RAD,
+        use_j2=_USE_J2,
+        use_j22=_USE_J22
+    )
+
+#J2 ANTIGO
+#from J2 import external_accel, EarthParams, PerturbationFlags
+#_J2_ON = False
+
+#def _accel_J2(r_vec, v_vec, tval):
+    #if _J2_ON:
+        #return external_accel(r_vec, v_vec, tval,
+        #                      params=EarthParams(),
+        #                      flags=PerturbationFlags(j2=True))
+    #return 0.0 * r_vec
 
 from Drag import accel_drag, DragParams
 _DRAG_ON = False

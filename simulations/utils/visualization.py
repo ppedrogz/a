@@ -81,7 +81,7 @@ def plot_classic_orbital_elements(t: np.ndarray, elems: ElementsSeries):
     axs[0, 0].set_title('Semi-eixo maior a [km]')
     axs[0, 1].plot(t, elems.e, color="yellow")
     axs[0, 1].set_title('Excentricidade e')
-    axs[0, 1].set_ylim(-0.1, 0.1)
+   # axs[0, 1].set_ylim(-1, 1)
     # Linha 1: i (verde) e RAAN (vermelho, contínuo/corrigido)
     axs[1, 0].plot(t, elems.i_deg, color="green")
     axs[1, 0].set_title('Inclinação i [deg]')
@@ -93,7 +93,7 @@ def plot_classic_orbital_elements(t: np.ndarray, elems: ElementsSeries):
     axs[2, 0].plot(t, u_s, color="purple")
     axs[2, 0].set_title('Argumento da latitude u [deg]')
     axs[2, 1].plot(t, nu_pref, color="maroon")
-    axs[2, 1].set_title('Ângulo orbital: ν (ou u se e≈0) [deg]')
+    axs[2, 1].set_title('Anomalia verdadeira [deg]')
 
     for ax in axs.ravel():
         ax.grid(True)
