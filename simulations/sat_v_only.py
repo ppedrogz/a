@@ -1,8 +1,8 @@
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
-from simulations.utils.GetClassicOrbitalElements import *
-from simulations.utils.visualization import plot_classic_orbital_elements
+from utils.GetClassicOrbitalElements import *
+from utils.visualization import plot_classic_orbital_elements
 
 # ===================== condições iniciais =====================
 r = np.array([10016.34, -17012.52, 7899.28]) #eliptico parametros orbitais iniciais
@@ -282,3 +282,13 @@ a_pe = np.array([a_from_pe    (X[0:3,k], X[3:6,k], mu) for k in range(X.shape[1]
 print("drift(a_E)  [km] =", a_E.max()-a_E.min())
 print("drift(a_pe) [km] =", a_pe.max()-a_pe.min())
 print("max |a_E - a_pe| [m] =", 1000*np.max(np.abs(a_E-a_pe)))
+
+from utils.eccentricity import plot_eccentricity_time, plot_eccentricity_in_orbital_plane
+
+# 1) componentes e módulo vs. tempo
+plot_eccentricity_time(t, X, mu)
+plt.show()
+
+# 2) trajetória de e no plano orbital (mostra rotação do perigeu)
+plot_eccentricity_in_orbital_plane(X, mu)
+plt.show()
