@@ -15,7 +15,7 @@ earth_radius = 6378.0  # km
 mu = 3.986e5           # km^3/s^2
 
 # ===================== Dados de propulsão =====================
-T   = 1.1e-3       # N
+T   = 1.1e-3      # N
 Isp = 2150.0       # s
 g0  = 9.80665      # m/s^2
 m0  = 20.0         # kg (inicial)
@@ -377,3 +377,12 @@ def simulate(j2: bool = True, j22: bool = False, drag: bool = False):
         incs_deg.append(get_inclination(r_vec, v_vec, mu))
 
     return sol.t, X, np.array(phi_deg, float), np.array(incs_deg, float), orbital_elementss
+from utils.eccentricity import plot_eccentricity_time, plot_eccentricity_in_orbital_plane
+
+# 1) componentes e módulo vs. tempo
+plot_eccentricity_time(t, X, mu)
+plt.show()
+
+# 2) trajetória de e no plano orbital (mostra rotação do perigeu)
+plot_eccentricity_in_orbital_plane(X, mu)
+plt.show()

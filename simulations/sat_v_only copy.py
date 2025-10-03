@@ -33,7 +33,7 @@ from achatamento import (
     EarthShapeParams as ShapeParams,
     accel_achatamento_total,
 )
-_USE_J2  = True
+_USE_J2  = False
 _USE_J22 = False            # ligue para testar
 _GAMMA   = 7.2921150e-5     # rad/s, rotação da Terra em ECI (tesseral “gira”)
 LAMBDA22_DEG = -14.79 # lambdat = gamma * t (rad) 
@@ -325,3 +325,12 @@ def simulate():
         incs_deg.append(get_inclination(r_vec, v_vec, mu))
 
     return sol.t, X, np.array(nus_deg, float), np.array(incs_deg, float), orbital_elementss
+from utils.eccentricity import plot_eccentricity_time, plot_eccentricity_in_orbital_plane
+
+# 1) componentes e módulo vs. tempo
+plot_eccentricity_time(t, X, mu)
+plt.show()
+
+# 2) trajetória de e no plano orbital (mostra rotação do perigeu)
+plot_eccentricity_in_orbital_plane(X, mu)
+plt.show()
