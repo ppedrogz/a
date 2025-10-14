@@ -33,8 +33,8 @@ from achatamento import (
     EarthShapeParams as ShapeParams,
     accel_achatamento_total,
 )
-_USE_J2  = False
-_USE_J22 = False            # ligue para testar
+_USE_J2  = True
+_USE_J22 = False          # ligue para testar
 _GAMMA   = 7.2921150e-5     # rad/s, rotação da Terra em ECI (tesseral “gira”)
 LAMBDA22_DEG = -14.79 # lambdat = gamma * t (rad) 
 _SHAPE   = ShapeParams()  # μ, Re, J2, J22
