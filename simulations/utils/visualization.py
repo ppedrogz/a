@@ -86,14 +86,15 @@ def plot_classic_orbital_elements(t: np.ndarray, elems: ElementsSeries):
     axs[1, 0].plot(t, elems.i_deg, color="green")
     axs[1, 0].set_title('Inclinação i [deg]')
     axs[1, 1].plot(t, Om_s, color="red")
-    axs[1, 1].set_title('RAAN Ω [deg] (corrigido p/ i≈0)')
+    axs[1, 1].set_title('RAAN Ω [deg]')
     axs[1, 1].set_ylim(-10, 10)
 
     # Linha 2: u (roxo) e ν_pref (vinho/maroon)
-    axs[2, 0].plot(t, w_s, color="purple")
-    axs[2, 0].set_title('Argumento de perigeu [deg]')
+    axs[2, 0].plot(t, u_s, color="cyan")
+    axs[2, 0].set_title('Argumento de latitude [deg]')
     axs[2, 1].plot(t, nu_pref, color="maroon")
-    axs[2, 1].set_title('Anomalia verdadeira [deg]')
+    axs[2, 1].plot(t, w_s, color="purple")
+    axs[2, 1].set_title('Anomalia verdadeira com Argumento de Perigeu [deg]')
 
     for ax in axs.ravel():
         ax.grid(True)

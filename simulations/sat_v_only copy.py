@@ -18,7 +18,7 @@ v = np.array([0.0, 5.383, 5.383])
 t = np.linspace(0, 43200, 10000)  # 12 h
 earth_radius = 6378.0  # km
 mu = 3.986e5           # km^3/s^2
-thrust = 1.1e-3        # N
+thrust = 0      # N
 
 # ===================== Propulsão / massa =====================
 T   = thrust    # N
