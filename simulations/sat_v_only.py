@@ -33,8 +33,8 @@ from achatamento import (
     EarthShapeParams as ShapeParams,
     accel_achatamento_total,
 )
-_USE_J2  = True
-_USE_J22 = False          # ligue para testar
+_USE_J2  = False
+_USE_J22 = False        # ligue para testar
 _GAMMA   = 7.2921150e-5     # rad/s, rotação da Terra em ECI (tesseral “gira”)
 LAMBDA22_DEG = -14.79 # lambdat = gamma * t (rad) 
 _SHAPE   = ShapeParams()  # μ, Re, J2, J22
@@ -60,7 +60,7 @@ def _accel_achatamento(r_vec: np.ndarray, tval: float) -> np.ndarray:
 
 # ===================== Arrasto atmosférico (opcional) =====================
 from Drag import accel_drag, DragParams
-_DRAG_ON = False
+_DRAG_ON = True
 _DRAG = DragParams(Cd=2.2, A_ref_m2=0.02, use_atmo_rotation=True,
                    rho0_kg_m3=3.614e-11, h0_km=200.0, H_km=50.0)
 
