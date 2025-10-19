@@ -10,7 +10,7 @@ from utils.orbitalElementsOperations import*
 r = np.array([6877.452, 0.0, 0.0])  # parametros orbitais ITASAT-2 (LEO quase circular)
 v = np.array([0.0, 5.383, 5.383])
 
-t = np.linspace(0, 43200, 10000)  # 12 h
+t = np.linspace(0, 4320000, 100000)  # 12 h
 earth_radius = 6378.0  # km
 mu = 3.986e5           # km^3/s^2
 
