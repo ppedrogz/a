@@ -10,16 +10,16 @@ from utils.orbitalElementsOperations import*
 r = np.array([6877.452, 0.0, 0.0])  # parametros orbitais ITASAT-2 (LEO quase circular)
 v = np.array([0.0, 5.383, 5.383])
 
-t = np.linspace(0, 4320000, 100000)  # 12 h
+t = np.linspace(0, 43200, 10000)  # 12 h
 earth_radius = 6378.0  # km
 mu = 3.986e5           # km^3/s^2
 
 # ===================== Dados de propulsão =====================
 T   = 1.1e-3      # N
-Isp = 2150.0       # s
-g0  = 9.80665      # m/s^2
-m0  = 20.0         # kg (inicial)
-m_dry = 15.0       # kg (massa seca)
+Isp = 2150.0      # s
+g0  = 9.80665     # m/s^2
+m0  = 20.0        # kg (inicial)
+m_dry = 15.0      # kg (massa seca)
 
 # =============================================================================
 #  ACHATAMENTO (J2 + J22) compatível com o ar_prs.for
@@ -29,25 +29,17 @@ from achatamento import (
     accel_achatamento_total,
 )
 
-# ---- flags globais (podem ser sobrescritos por simulate(...)) ----
 _USE_J2  = False    # deixe True para incluir J2
 _USE_J22 = False    # ligue para incluir J22 tesseral
-# rotação sideral da Terra (rad/s) — o padrão tesseral “gira” no ECI
-_GAMMA         = 7.2921150e-5
-# longitude do eixo do termo J22 (modelo GEM/ar_prs): -14.79 graus
+_GAMMA         = 7.2921150e-5      # rad/s
 LAMBDA22_DEG   = -14.79
 LAMBDA22_RAD   = np.deg2rad(LAMBDA22_DEG)
-_SHAPE         = ShapeParams()  # μ, Re, J2, J22
+_SHAPE         = ShapeParams()     # μ, Re, J2, J22
 
 def _lambdat_rad(tval: float) -> float:
-    """Ângulo de rotação da Terra no ECI (rad) para o termo tesseral."""
     return _GAMMA * float(tval)
 
 def _accel_achatamento(r_vec: np.ndarray, tval: float) -> np.ndarray:
-    """
-    Aceleração de achatamento (J2 + opcional J22), em km/s^2,
-    frame inercial equatorial (z || eixo de rotação da Terra).
-    """
     return accel_achatamento_total(
         r_vec, _SHAPE,
         lambdat_rad=_lambdat_rad(tval),
@@ -55,18 +47,6 @@ def _accel_achatamento(r_vec: np.ndarray, tval: float) -> np.ndarray:
         use_j2=_USE_J2,
         use_j22=_USE_J22,
     )
-
-# -----------------------------------------------------------------------------
-# [ANTIGO] J2 “genérico” — mantido como referência (comentado)
-# -----------------------------------------------------------------------------
-# from J2 import external_accel, EarthParams, PerturbationFlags
-# _J2_ON = False
-# def _accel_J2(r_vec, v_vec, tval):
-#     if _J2_ON:
-#         return external_accel(r_vec, v_vec, tval,
-#                               params=EarthParams(),
-#                               flags=PerturbationFlags(j2=True))
-#     return 0.0 * r_vec
 
 # ===================== Arrasto (opcional) =====================
 from Drag import accel_drag, DragParams
@@ -132,7 +112,7 @@ def x_dot(tval, x):
     # Gravidade 2-corpos
     xdot[3:6] = -(mu/(rnorm**3))*r_vec
 
-    # ======= ACHATAMENTO (J2 + opcional J22) =======
+    # Achatamento (J2 + opcional J22)
     xdot[3:6] += _accel_achatamento(r_vec, tval)
 
     # Arrasto (se ligado)
@@ -186,13 +166,13 @@ sol = solve_ivp(
 )
 X = sol.y
 
-# ----------------- elementos para plots -----------------
+# ----------------- séries de elementos para plots -----------------
 a_series      = np.array([get_major_axis         (X[0:3, k], X[3:6, k], mu) for k in range(X.shape[1])], float)
 e_series      = np.array([get_eccentricity       (X[0:3, k], X[3:6, k], mu) for k in range(X.shape[1])], float)
 i_deg_series  = np.array([get_inclination        (X[0:3, k], X[3:6, k], mu) for k in range(X.shape[1])], float)
 Om_deg_series = np.array([get_ascending_node     (X[0:3, k], X[3:6, k], mu) for k in range(X.shape[1])], float)
 w_deg_series  = np.array([get_argument_of_perigee(X[0:3, k], X[3:6, k], mu) for k in range(X.shape[1])], float)
-nu_deg_series = np.array([get_true_anomaly      (X[0:3, k], X[3:6, k], mu) for k in range(X.shape[1])], float)
+nu_deg_series = np.array([get_true_anomaly       (X[0:3, k], X[3:6, k], mu) for k in range(X.shape[1])], float)
 u_deg_series     = np.array([get_argument_of_latitude(X[0:3, k], X[3:6, k], mu) for k in range(X.shape[1])], float)
 ltrue_deg_series = np.array([get_true_longitude     (X[0:3, k], X[3:6, k], mu) for k in range(X.shape[1])], float)
 
@@ -276,16 +256,26 @@ if 180.0 in MEAN_THETA_LIST_DEG:
     print(f"→ Janela centrada no APOGEU: usar v ≈ {v_apo_meas:.9f} km/s (medido) "
           f"ou {vaF:.9f} km/s (teórico no fim).")
 
-# ---------- plot dos elementos ----------
+# ---------- PLOT DOS ELEMENTOS (formato idêntico ao V-only) ----------
 elems = ElementsSeries(
-    a=a_series, e=e_series, i_deg=i_deg_series,
-    Omega_deg=Om_deg_series, omega_deg=w_deg_series,
-    nu_deg=nu_deg_series, u_deg=u_deg_series,
-    ltrue_deg=ltrue_deg_series, energy=energy_series
+    a=a_series,
+    e=e_series,
+    i_deg=i_deg_series,
+    Omega_deg=Om_deg_series,
+    omega_deg=w_deg_series,
+    nu_deg=nu_deg_series,
+    u_deg=u_deg_series,
+    ltrue_deg=ltrue_deg_series,
+    energy=energy_series
 )
-plot_classic_orbital_elements(t, elems)
+fig_elems = plot_classic_orbital_elements(t, elems)
+try:
+    fig_elems.suptitle("Evolução dos elementos orbitais — Satélite VH DOWN", fontsize=12)
+except Exception:
+    pass
+plt.show()
 
-#  Sombras de empuxo H nas janelas
+# ---------- Sombras de empuxo H nas janelas (sobre e.g. Ω desenrolado) ----------
 thr_H_on_mask = (m_series > m_dry) & fire_mask
 def _mask_to_spans(tarr, mask_bool):
     tarr = np.asarray(tarr, float); mask = np.asarray(mask_bool, bool)
@@ -305,7 +295,6 @@ def add_thrust_spans(ax, tarr, mask_bool, *, color="tab:orange", alpha=0.15, lab
         ax.legend(handles + [patch], labels + [label])
 
 def _unwrap_deg(a_deg): return np.degrees(np.unwrap(np.radians(np.asarray(a_deg, float))))
-
 Omega_series = Om_deg_series
 Omega_unw = _unwrap_deg(Omega_series)
 
@@ -351,11 +340,6 @@ def simulate(j2: bool = True, j22: bool = False, drag: bool = False):
     """
     Executa a integração com a dinâmica deste módulo (V_H DOWN) e devolve:
       (t, X, nus_deg, incs_deg, orbital_elementss)
-    Parâmetros:
-      j2   : liga/desliga J2 (achatamento zonal)
-      j22  : liga/desliga J22 (tesseral de ordem 2)
-      drag : liga/desliga arrasto
-    OBS: 'nus_deg' é a FASE robusta (ν ou u/l_true) em graus.
     """
     global _USE_J2, _USE_J22, _DRAG_ON
     _USE_J2, _USE_J22, _DRAG_ON = bool(j2), bool(j22), bool(drag)
@@ -377,12 +361,3 @@ def simulate(j2: bool = True, j22: bool = False, drag: bool = False):
         incs_deg.append(get_inclination(r_vec, v_vec, mu))
 
     return sol.t, X, np.array(phi_deg, float), np.array(incs_deg, float), orbital_elementss
-from utils.eccentricity import plot_eccentricity_time, plot_eccentricity_in_orbital_plane
-
-# 1) componentes e módulo vs. tempo
-plot_eccentricity_time(t, X, mu)
-plt.show()
-
-# 2) trajetória de e no plano orbital (mostra rotação do perigeu)
-plot_eccentricity_in_orbital_plane(X, mu)
-plt.show()
