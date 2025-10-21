@@ -30,8 +30,8 @@ from achatamento import (
 )
 
 # ---- flags globais (podem ser sobrescritos por simulate(...)) ----
-_USE_J2  = False    # deixe True para incluir J2
-_USE_J22 = False    # ligue para incluir J22 tesseral
+_USE_J2  = True  # deixe True para incluir J2
+_USE_J22 = True    # ligue para incluir J22 tesseral
 # rotação sideral da Terra (rad/s) — o padrão tesseral “gira” no ECI
 _GAMMA         = 7.2921150e-5
 # longitude do eixo do termo J22 (modelo GEM/ar_prs): -14.79 graus
@@ -325,7 +325,7 @@ x_e = earth_radius * np.cos(u_grid) * np.sin(v_grid)
 y_e = earth_radius * np.sin(u_grid) * np.sin(v_grid)
 z_e = earth_radius * np.cos(v_grid)
 ax.plot_wireframe(x_e, y_e, z_e, color="g", alpha=0.3)
-ax.plot3D(X[0, :], X[1, :], X[2, :], 'r', label="Satélite V_H UP")
+ax.plot3D(X[0, :], X[1, :], X[2, :], 'b', label="Satélite V_H UP")
 ax.set_box_aspect([1, 1, 1])
 ax.set_title("Órbita simulada - Satélite V_H UP")
 ax.legend(); ax.axis('equal')

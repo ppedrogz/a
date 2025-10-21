@@ -15,7 +15,7 @@ earth_radius = 6378.0  # km
 mu = 3.986e5           # km^3/s^2
 
 # ===================== Dados de propulsão =====================
-T   = 1.1e-3      # N
+T   = 1.1e-3    # N
 Isp = 2150.0      # s
 g0  = 9.80665     # m/s^2
 m0  = 20.0        # kg (inicial)
@@ -29,8 +29,8 @@ from achatamento import (
     accel_achatamento_total,
 )
 
-_USE_J2  = False    # deixe True para incluir J2
-_USE_J22 = False    # ligue para incluir J22 tesseral
+_USE_J2  = True   # deixe True para incluir J2
+_USE_J22 = True    # ligue para incluir J22 tesseral
 _GAMMA         = 7.2921150e-5      # rad/s
 LAMBDA22_DEG   = -14.79
 LAMBDA22_RAD   = np.deg2rad(LAMBDA22_DEG)
@@ -70,7 +70,7 @@ if DUAL_THRUSTERS:
 
 # ===================== Janelas em ângulo orbital =====================
 THRUST_INTERVAL_DEG = 30.0
-MEAN_THETA_LIST_DEG = [180]  # 180 = apogeu; 0 = perigeu
+MEAN_THETA_LIST_DEG = [180, 0]  # 180 = apogeu; 0 = perigeu
 
 def wrap_deg(a): return np.remainder(a, 360.0)
 
