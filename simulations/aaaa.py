@@ -174,17 +174,60 @@ def draw_textured_earth(ax, radius_km: float, texture_path: str,
     ax.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=facecolors,
                     linewidth=0, antialiased=False, shade=False)
 
-# ===================== Plot 3D com textura =====================
-fig = plt.figure()
+# ============ Função utilitária: eixos iguais (evita Terra "oval") ============
+def set_axes_equal(ax):
+    """Força as escalas X=Y=Z em um Axes3D."""
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
+
+    x_range = x_limits[1] - x_limits[0]
+    y_range = y_limits[1] - y_limits[0]
+    z_range = z_limits[1] - z_limits[0]
+    max_range = max([x_range, y_range, z_range]) / 2.0
+
+    x_mid = np.mean(x_limits)
+    y_mid = np.mean(y_limits)
+    z_mid = np.mean(z_limits)
+
+    ax.set_xlim3d([x_mid - max_range, x_mid + max_range])
+    ax.set_ylim3d([y_mid - max_range, y_mid + max_range])
+    ax.set_zlim3d([z_mid - max_range, z_mid + max_range])
+
+# ===================== Plot 3D com textura (com eixos e grade) =====================
+fig = plt.figure(figsize=(10, 8))
 ax = fig.add_subplot(111, projection="3d")
 
-TEXTURE_PATH = "assets/earth.jpeg"  # coloque aqui o caminho do arquivo
+TEXTURE_PATH = r"c:\Users\ppggo\Documents\GitHub\a\simulations\earth.jpg"
 draw_textured_earth(ax, radius_km=earth_radius, texture_path=TEXTURE_PATH)
 
-ax.plot3D(X[0, :], X[1, :], X[2, :], color='lime', lw=1.8, label="Órbita (V-only)")
-ax.set_box_aspect([1, 1, 1])
-ax.set_title("Órbita simulada - Terra Texturizada")
-ax.legend()
-ax.axis('off')
+# Órbita
+ax.plot3D(X[0, :], X[1, :], X[2, :], color='lime', lw=2.0, label="Órbita (V-only)")
 
+# Labels, título e legenda
+ax.set_title("Órbita simulada - Terra Texturizada", pad=14)
+ax.set_xlabel("X [km]")
+ax.set_ylabel("Y [km]")
+ax.set_zlabel("Z [km]")
+ax.legend(loc="upper right")
+
+# Limites simétricos baseados na maior distância + margem
+rmax = float(np.max(np.linalg.norm(X[0:3, :], axis=0)))
+R = max(earth_radius, rmax) * 1.15
+ax.set_xlim(-R, R)
+ax.set_ylim(-R, R)
+ax.set_zlim(-R, R)
+
+# Aspecto cúbico e escalas iguais (sem “oval”)
+ax.set_box_aspect([1, 1, 1])
+set_axes_equal(ax)
+
+# Ticks e grade
+ticks = np.linspace(-R, R, 5)
+ax.set_xticks(ticks)
+ax.set_yticks(ticks)
+ax.set_zticks(ticks)
+ax.grid(True)
+
+plt.tight_layout()
 plt.show()
