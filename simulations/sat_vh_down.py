@@ -29,8 +29,8 @@ from achatamento import (
     accel_achatamento_total,
 )
 
-_USE_J2  = True   # deixe True para incluir J2
-_USE_J22 = True    # ligue para incluir J22 tesseral
+_USE_J2  = False  # deixe True para incluir J2
+_USE_J22 = False    # ligue para incluir J22 tesseral
 _GAMMA         = 7.2921150e-5      # rad/s
 LAMBDA22_DEG   = -14.79
 LAMBDA22_RAD   = np.deg2rad(LAMBDA22_DEG)
@@ -69,8 +69,8 @@ if DUAL_THRUSTERS:
     Isp_V, Isp_H = Isp, Isp
 
 # ===================== Janelas em ângulo orbital =====================
-THRUST_INTERVAL_DEG = 60
-MEAN_THETA_LIST_DEG = [180, 0]  # 180 = apogeu; 0 = perigeu
+THRUST_INTERVAL_DEG = 30
+MEAN_THETA_LIST_DEG = [0]  # 180 = apogeu; 0 = perigeu
 
 def wrap_deg(a): return np.remainder(a, 360.0)
 
