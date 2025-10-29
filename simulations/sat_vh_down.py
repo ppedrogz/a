@@ -10,7 +10,7 @@ from utils.orbitalElementsOperations import*
 r = np.array([6877.452, 0.0, 0.0])  # parametros orbitais ITASAT-2 (LEO quase circular)
 v = np.array([0.0, 5.383, 5.383])
 
-t = np.linspace(0, 43200, 10000)  # 12 h
+t = np.linspace(0, 4320000, 100000)  # 12 h
 earth_radius = 6378.0  # km
 mu = 3.986e5           # km^3/s^2
 
@@ -70,7 +70,7 @@ if DUAL_THRUSTERS:
 
 # ===================== Janelas em ângulo orbital =====================
 THRUST_INTERVAL_DEG = 60
-MEAN_THETA_LIST_DEG = [0]  # 180 = apogeu; 0 = perigeu
+MEAN_THETA_LIST_DEG = [180]  # 180 = apogeu; 0 = perigeu
 
 def wrap_deg(a): return np.remainder(a, 360.0)
 

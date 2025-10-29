@@ -1,199 +1,286 @@
-# ==============================================================
 # main_constelacao_last_orbit.py
-# Objetivo: executar as três simulações (VH UP, V ONLY, VH DOWN),
-# recortar APENAS a ÚLTIMA ÓRBITA COMPLETA pela FASE (u) e comparar
-# inclinação vs ângulo orbital (usamos u, robusto para e≈0, i≈0).
-# ==============================================================
-
+from __future__ import annotations
 import numpy as np
 import matplotlib.pyplot as plt
+import inspect
 
-# Importa os propagadores (cada um deve expor simulate())
-import sat_vh_up as sat_vh_up
-import sat_v_only as sat_v_only
-import sat_vh_down as sat_vh_down
+# Módulos dos satélites (cada um precisa expor simulate())
+import sat_vh_down as S_DOWN
+import sat_vh_up   as S_UP
+import sat_v_only  as S_V
 
-MU_EARTH = 3.986e5  # km^3/s^2
+# Utils do projeto
+from utils.visualization import ElementsSeries, plot_classic_orbital_elements
+from utils.orbital_elements import *
+from utils.orbitalElementsOperations import *
 
-# ----------------- Ângulo u (argumento da latitude) -----------------
-def _arg_of_latitude_series_deg(X: np.ndarray) -> np.ndarray:
-    """
-    Retorna u (argumento da latitude) em graus, no intervalo [0, 360),
-    para cada amostra de X=[r;v;...].
-    Robusto para órbitas quase-circulares e quase-equatoriais.
-    """
-    k_hat = np.array([0.0, 0.0, 1.0])
-    rM = X[0:3, :].T  # (N,3)
-    vM = X[3:6, :].T  # (N,3)
-    u_list = []
-    for r_vec, v_vec in zip(rM, vM):
-        h = np.cross(r_vec, v_vec); h_n = np.linalg.norm(h) + 1e-32
-        h_hat = h / h_n
-        n = np.cross(k_hat, h); n_n = np.linalg.norm(n)
-        if n_n > 1e-12:
-            p_hat = n / n_n
-        else:
-            # Equatorial: projeta î=(1,0,0) no plano orbital
-            i_hat = np.array([1.0, 0.0, 0.0])
-            p_tmp = i_hat - np.dot(i_hat, h_hat) * h_hat
-            p_hat = p_tmp / (np.linalg.norm(p_tmp) + 1e-32)
-        q_hat = np.cross(h_hat, p_hat)
-        x = np.dot(r_vec, p_hat)
-        y = np.dot(r_vec, q_hat)
-        u_deg = (np.degrees(np.arctan2(y, x)) + 360.0) % 360.0
-        u_list.append(u_deg)
-    return np.array(u_list, dtype=float)
+# ------------------------------- Constantes -------------------------------
+EARTH_RADIUS_KM = 6378.0
+MU = 3.986e5  # km^3/s^2
 
-def _unwrap_deg(a_deg: np.ndarray) -> np.ndarray:
-    """Desembrulha ângulo em graus (equivalente ao np.unwrap em rad)."""
-    a_rad = np.deg2rad(a_deg)
-    a_unw = np.unwrap(a_rad)
-    return np.rad2deg(a_unw)
+# ------------------------------- Helpers ---------------------------------
+def _as_7xN(X):
+    X = np.asarray(X)
+    if X.ndim != 2:
+        raise ValueError("X deve ser 2D.")
+    if X.shape[0] in (6, 7) and X.shape[1] not in (6, 7):
+        X7 = X
+    elif X.shape[1] in (6, 7) and X.shape[0] not in (6, 7):
+        X7 = X.T
+    else:
+        X7 = X
+    if X7.shape[0] == 6:  # sem massa
+        X7 = np.vstack([X7, np.full((1, X7.shape[1]), np.nan)])
+    return X7
 
-# ----------------- Seleção do período orbital pela FASE (sem cortes) -----------------
-def select_orbit_last_full_by_u(t, X, incs, elems):
-    """
-    Seleciona a ÚLTIMA órbita COMPLETA usando o argumento da latitude u (desembrulhado).
-    Retorna: (t_sel, X_sel, u_sel_0_360, incs_sel, elems_sel)
-    """
-    t = np.asarray(t, float)
-    incs = np.asarray(incs, float)
+def _unwrap_deg(a_deg):
+    return np.degrees(np.unwrap(np.radians(np.asarray(a_deg, float))))
+
+def _phase_deg_and_incl_from_states(X):
+    """Fase robusta (ν ou u) e inclinação, em graus."""
     N = X.shape[1]
-    if not (t.size == N == incs.size == len(elems)):
-        raise ValueError("Séries desalinhadas (t, X, incs, elems).")
+    phase = np.empty(N); incs = np.empty(N)
+    for k in range(N):
+        r = X[0:3, k]; v = X[3:6, k]
+        e_now = get_eccentricity(r, v, MU)
+        phase[k] = get_argument_of_latitude(r, v, MU) if e_now < 1e-5 else get_true_anomaly(r, v, MU)
+        incs[k]  = get_inclination(r, v, MU)
+    return phase, incs
 
-    # 1) u(t) → unwrap para obter fase cumulativa
-    u_deg = _arg_of_latitude_series_deg(X)
-    u_unw = _unwrap_deg(u_deg)  # cresce monotonicamente (com pequenas oscilações permitidas)
+def _elements_from_states(X):
+    N = X.shape[1]
+    a      = np.empty(N); e      = np.empty(N); i_deg  = np.empty(N)
+    Om_deg = np.empty(N); w_deg  = np.empty(N); nu_deg = np.empty(N)
+    u_deg  = np.empty(N); ltrue  = np.empty(N); energy = np.empty(N)
+    for k in range(N):
+        r = X[0:3, k]; v = X[3:6, k]
+        a[k]       = get_major_axis(r, v, MU)
+        e[k]       = get_eccentricity(r, v, MU)
+        i_deg[k]   = get_inclination(r, v, MU)
+        Om_deg[k]  = get_ascending_node(r, v, MU)
+        w_deg[k]   = get_argument_of_perigee(r, v, MU)
+        nu_deg[k]  = get_true_anomaly(r, v, MU)
+        u_deg[k]   = get_argument_of_latitude(r, v, MU)
+        ltrue[k]   = get_true_longitude(r, v, MU)
+        try:
+            energy[k] = get_specific_energy(r, v, MU)
+        except Exception:
+            energy[k] = 0.5*np.dot(v, v) - MU/np.linalg.norm(r)
+    return ElementsSeries(a, e, i_deg, Om_deg, w_deg, nu_deg, u_deg, ltrue, energy)
 
-    # 2) Encontra os índices onde a contagem de voltas incrementa (cada +360°)
-    turns = np.floor(u_unw / 360.0).astype(int)
-    jump_idx = np.where(np.diff(turns) >= 1)[0]  # índice "antes" do salto de volta
+def _plot_earth_sphere(ax):
+    u, v = np.mgrid[0:2*np.pi:60j, 0:np.pi:30j]
+    x_e = EARTH_RADIUS_KM * np.cos(u) * np.sin(v)
+    y_e = EARTH_RADIUS_KM * np.sin(u) * np.sin(v)
+    z_e = EARTH_RADIUS_KM * np.cos(v)
+    ax.plot_wireframe(x_e, y_e, z_e, color="g", alpha=0.25, linewidth=0.6)
 
-    if jump_idx.size >= 1:
-        # Pegar a última volta completa: entre os DOIS últimos limites
-        # Precisamos de pelo menos 2 limites; se tiver só 1, tentamos usar a penúltima por aproximação.
-        if jump_idx.size >= 2:
-            i0 = jump_idx[-2] + 1
-            i1 = jump_idx[-1] + 1  # incluir o ponto do novo ciclo
-        else:
-            # Apenas um limite detectado: tenta formar uma volta com ~360° anteriores
-            target = u_unw[jump_idx[-1] + 1] - 360.0
-            # índice mais próximo do target
-            i0 = int(np.argmin(np.abs(u_unw - target)))
-            i1 = jump_idx[-1] + 1
-            if i0 >= i1:
-                i0 = max(0, i1 - (i1 // 10 + 10))
+def _force_equal_3d_limits(ax, X_list):
+    rmax = EARTH_RADIUS_KM
+    for X in X_list:
+        rmax = max(rmax, float(np.linalg.norm(X[0:3, :], axis=0).max()))
+    R = 1.05 * rmax
+    ax.set_xlim(-R, R); ax.set_ylim(-R, R); ax.set_zlim(-R, R)
+    ax.set_box_aspect([1, 1, 1])
+
+def _plot_i_vs_phase_segmentado(phi_deg, inc_deg, *, ax=None, color=None, label=None, **kw):
+    phi_deg = np.asarray(phi_deg, float); inc_deg = np.asarray(inc_deg, float)
+    if ax is None: fig, ax = plt.subplots()
+    dn = np.diff(phi_deg); wraps = np.where(dn < -180.0)[0]
+    start = 0; first = True
+    for w in wraps:
+        ax.plot(phi_deg[start:w+1], inc_deg[start:w+1], color=color, label=(label if first else None), **kw)
+        first = False; start = w + 1
+    ax.plot(phi_deg[start:], inc_deg[start:], color=color, label=(label if first else None), **kw)
+    ax.set_xlabel(r'Fase (ν ou $u$) [deg]'); ax.set_ylabel(r'$i$ [deg]')
+    ax.set_xlim(0, 360); ax.grid(True); return ax
+
+def _try_disable_perturbations_in_module(mod):
+    for attr in ("_USE_J2", "_USE_J22", "_DRAG_ON", "_J2_ON", "_J22_ON", "J2_ON", "J22_ON", "DRAG_ON"):
+        if hasattr(mod, attr):
+            try: setattr(mod, attr, False)
+            except Exception: pass
+
+def _simulate_no_perturbations(mod):
+    """Chama mod.simulate() sem perturbações e normaliza a saída."""
+    _try_disable_perturbations_in_module(mod)
+    sim = mod.simulate
+    try:
+        sig = inspect.signature(sim); params = sig.parameters
+        kwargs = {}
+        for k in ("j2", "j22", "drag"):
+            if k in params: kwargs[k] = False
+        out = sim(**kwargs) if kwargs else sim()
+    except TypeError:
+        out = sim()
+    # normaliza
+    if len(out) >= 2:
+        t, X_raw = out[0], out[1]
     else:
-        # Falhou a detecção robusta: cai no período aproximado (vis-viva) no final
-        rN = X[0:3, -1]; vN = X[3:6, -1]
-        rNn = float(np.linalg.norm(rN)); vN2 = float(np.dot(vN, vN))
-        aN = 1.0 / (2.0 / rNn - vN2 / MU_EARTH)
-        T = 2.0 * np.pi * np.sqrt(abs(aN) ** 3 / MU_EARTH)
-        t1 = t[-1]; t0 = t1 - T
-        mask = (t >= t0) & (t <= t1)
-        idx = np.where(mask)[0]
-        i0, i1 = idx[0], idx[-1]
+        raise RuntimeError("simulate() deve retornar pelo menos (t, X).")
+    X = _as_7xN(X_raw)
+    phase, incs = _phase_deg_and_incl_from_states(X)
+    return np.asarray(t, float), X, phase, incs
 
-    # --- Fallback: se corte gerar menos de 100 amostras, usa período estimado via vis-viva
-    slic = slice(i0, i1 + 1)
-    if (i1 - i0) < 100:
-        print("[WARN] Corte curto detectado — aplicando fallback temporal (vis-viva).")
-        rN = X[0:3, -1]; vN = X[3:6, -1]
-        rNn = float(np.linalg.norm(rN)); vN2 = float(np.dot(vN, vN))
-        aN = 1.0 / (2.0 / rNn - vN2 / MU_EARTH)
-        T = 2.0 * np.pi * np.sqrt(abs(aN) ** 3 / MU_EARTH)
-        t1 = t[-1]; t0 = t1 - T
-        mask = (t >= t0) & (t <= t1)
-        idx = np.where(mask)[0]
-        slic = slice(idx[0], idx[-1] + 1)
+# --------- seleção da ÚLTIMA ÓRBITA (preferência: por wraps de fase; fallback: por período) ----------
+def _last_orbit_indices(t, phase_deg, X, elems=None):
+    """
+    Retorna slice de índices [i0:i1] da última órbita COMPLETA.
+    Estratégia:
+      1) Achar quebras (wraps) de fase: diff < -180 deg.
+         Se houver >=2 wraps: usa o intervalo entre os DOIS ÚLTIMOS wraps (última órbita completa).
+      2) Caso contrário: estima T = 2π sqrt(a^3/μ) usando 'a' terminal e recorta [t_end - T, t_end].
+    """
+    phase_deg = np.asarray(phase_deg, float)
+    wraps = np.where(np.diff(phase_deg) < -180.0)[0]
+    if wraps.size >= 2:
+        i0 = wraps[-2] + 1
+        i1 = wraps[-1] + 1  # slice exclusivo do último wrap (uma órbita completa)
+        return slice(i0, i1)
 
-    # Fatiamento consistente
-    t_sel     = t[slic]
-    X_sel     = X[:, slic]
-    incs_sel  = incs[slic]
-    elems_sel = elems[slic.start:slic.stop]
-
-
-    # 3) Recalcula u na janela e re-referencia para [0, 360) iniciando em zero (fase alinhada)
-    u_win_unw = _unwrap_deg(_arg_of_latitude_series_deg(X_sel))
-    u0 = u_win_unw[0]
-    u_rel = (u_win_unw - u0) % 360.0  # 0..360
-    # Garante que o último ponto seja 360°-ε (nunca exatamente 0, para não parecer "corte")
-    if u_rel[-1] < 359.0:
-        pass  # OK
+    # Fallback por período
+    if elems is None:
+        elems = _elements_from_states(X)
+    a_final = float(elems.a[-1])
+    if a_final <= 0.0 or not np.isfinite(a_final):
+        # fallback de emergência: pega 1 volta "aprox" pela média de velocidade e raio
+        # (para LEO ~ 5400-6000 s). Usamos 6000 s como guardião.
+        T_est = 6000.0
     else:
-        # pequena proteção numérica
-        u_rel[-1] = 359.999
+        n = np.sqrt(MU / (a_final**3))      # rad/s
+        T_est = 2.0 * np.pi / n             # s
 
-    # 4) Diagnóstico de fechamento geométrico (deve ser ~0 km)
-    closure = np.linalg.norm(X_sel[0:3, 0] - X_sel[0:3, -1])
-    print(f"[select_orbit] last full by u: slice={i0}:{i1}  |Δr_end-start|={closure:.6f} km (ideal ~ 0)")
+    t_end = float(t[-1])
+    t_start = t_end - T_est
+    if t_start <= t[0]:
+        return slice(0, len(t))  # não cabe uma órbita completa; devolve tudo
+    i0 = int(np.searchsorted(t, t_start, side="left"))
+    i1 = len(t)
+    return slice(i0, i1)
 
-    return t_sel, X_sel, u_rel, incs_sel, elems_sel
+def _rephase_0_360(phi_slice):
+    """Re-referencia a fase para iniciar em 0 e manter 0–360° na última órbita."""
+    phi0 = float(phi_slice[0])
+    x = (phi_slice - phi0) % 360.0
+    return x
 
-# ----------------- Execução das simulações -----------------
-PLOT_MODE = "last"  # mantido para consistência; agora a seleção é sempre por fase (u)
+# ===================================== MAIN =====================================
+if __name__ == "__main__":
+    # Cores
+    COLOR_UP   = "#1f77b4"  # azul
+    COLOR_V    = "#2ca02c"  # verde
+    COLOR_DOWN = "#d62728"  # vermelho
 
-# >>> Se desejar pular as simulações e carregar arquivos .npz, adapte aqui:
-RUN_SIMULATIONS = True
+    # 1) Simulações (sem perturbações)
+    t_up,   X_up,   phase_up,   incs_up   = _simulate_no_perturbations(S_UP)
+    t_v,    X_v,    phase_v,    incs_v    = _simulate_no_perturbations(S_V)
+    t_down, X_down, phase_down, incs_down = _simulate_no_perturbations(S_DOWN)
 
-if RUN_SIMULATIONS:
-    print("Simulando satélite VH UP...")
-    res_up = sat_vh_up.simulate()
-    print("Simulando satélite V ONLY...")
-    res_v  = sat_v_only.simulate()
-    print("Simulando satélite VH DOWN...")
-    res_dn = sat_vh_down.simulate()
-else:
-    # Exemplo de carga (ajuste nomes se já tiver salvo):
-    up = np.load("output_vh_up.npz", allow_pickle=True)
-    v  = np.load("output_v_only.npz", allow_pickle=True)
-    dn = np.load("output_vh_down.npz", allow_pickle=True)
-    res_up = (up["t"], up["X"], up["nus"], up["incs"], up["elems"].tolist())
-    res_v  = (v["t"],  v["X"],  v["nus"],  v["incs"],  v["elems"].tolist())
-    res_dn = (dn["t"], dn["X"], dn["nus"], dn["incs"], dn["elems"].tolist())
+    # 2) Elementos (para Ω e também para fallback do período)
+    E_up   = _elements_from_states(X_up)
+    E_v    = _elements_from_states(X_v)
+    E_down = _elements_from_states(X_down)
 
-# Desempacota
-t_up,   X_up,   nus_up,   incs_up,   elems_up  = res_up
-t_v,    X_v,    nus_v,    incs_v,    elems_v   = res_v
-t_down, X_down, nus_down, incs_down, elems_dn  = res_dn
+    # 3) Selecionar a ÚLTIMA ÓRBITA de cada satélite
+    sl_up   = _last_orbit_indices(t_up,   phase_up,   X_up,   E_up)
+    sl_v    = _last_orbit_indices(t_v,    phase_v,    X_v,    E_v)
+    sl_down = _last_orbit_indices(t_down, phase_down, X_down, E_down)
 
-# --- Recorta a ÚLTIMA órbita COMPLETA pela fase u (sem cortes) ---
-t_up,   X_up,   u_up,   incs_up,   elems_up  = select_orbit_last_full_by_u(t_up,   X_up,   incs_up,   elems_up)
-t_v,    X_v,    u_v,    incs_v,    elems_v   = select_orbit_last_full_by_u(t_v,    X_v,    incs_v,    elems_v)
-t_down, X_down, u_down, incs_down, elems_dn  = select_orbit_last_full_by_u(t_down, X_down, incs_down, elems_dn)
+    # Slices aplicados
+    t_up_o,   X_up_o   = t_up[sl_up],     X_up[:, sl_up]
+    t_v_o,    X_v_o    = t_v[sl_v],       X_v[:, sl_v]
+    t_down_o, X_down_o = t_down[sl_down], X_down[:, sl_down]
 
-# ----------------- Plot 3D da órbita (volta completa, sem mordida) -----------------
-fig = plt.figure()
-ax = fig.add_subplot(111, projection="3d")
-earth_radius = 6378.0
+    phase_up_o,   incs_up_o   = phase_up[sl_up],   incs_up[sl_up]
+    phase_v_o,    incs_v_o    = phase_v[sl_v],     incs_v[sl_v]
+    phase_down_o, incs_down_o = phase_down[sl_down], incs_down[sl_down]
 
-ugrid, vgrid = np.mgrid[0:2*np.pi:30j, 0:np.pi:15j]
-x_e = earth_radius * np.cos(ugrid) * np.sin(vgrid)
-y_e = earth_radius * np.sin(ugrid) * np.sin(vgrid)
-z_e = earth_radius * np.cos(vgrid)
-ax.plot_wireframe(x_e, y_e, z_e, color="g", alpha=0.3)
-ax.set_box_aspect([1, 1, 1])
+    # Re-referenciar fase (0–360) para visual mais limpo na última órbita
+    phase_up_o   = _rephase_0_360(phase_up_o)
+    phase_v_o    = _rephase_0_360(phase_v_o)
+    phase_down_o = _rephase_0_360(phase_down_o)
 
-ax.plot3D(X_up[0, :],   X_up[1, :],   X_up[2, :],   'b-', label="VH Up")
-ax.plot3D(X_v[0, :],    X_v[1, :],    X_v[2, :],    'g-', label="V Only")
-ax.plot3D(X_down[0, :], X_down[1, :], X_down[2, :], 'r-', label="VH Down")
+    # Recalcular elementos nas janelas (apenas para RAAN/a/e/i plotados)
+    E_up_o   = _elements_from_states(X_up_o)
+    E_v_o    = _elements_from_states(X_v_o)
+    E_down_o = _elements_from_states(X_down_o)
 
-ax.set_title(f"Constelação - 3 Satélites (última órbita completa por fase u)")
-ax.legend()
-ax.axis('equal')
-plt.show()
+    # --------------------------- 3D conjunto (última órbita) ---------------------------
+    fig = plt.figure()
+    ax3d = fig.add_subplot(111, projection="3d")
+    _plot_earth_sphere(ax3d)
+    ax3d.plot3D(X_up_o[0, :],   X_up_o[1, :],   X_up_o[2, :],   '-', color=COLOR_UP,   label="VH UP")
+    ax3d.plot3D(X_v_o[0, :],    X_v_o[1, :],    X_v_o[2, :],    '-', color=COLOR_V,    label="V ONLY")
+    ax3d.plot3D(X_down_o[0, :], X_down_o[1, :], X_down_o[2, :], '-', color=COLOR_DOWN, label="VH DOWN")
+    _force_equal_3d_limits(ax3d, [X_up_o, X_v_o, X_down_o])
+    ax3d.set_xlabel("x [km]"); ax3d.set_ylabel("y [km]"); ax3d.set_zlabel("z [km]")
+    ax3d.set_title("Órbitas — Três satélites (apenas a ÚLTIMA órbita)")
+    ax3d.legend(); plt.show()
 
-# ----------------- Inclinação vs ângulo orbital (usamos u re-referenciado) -----------------
-plt.figure()
-plt.plot(u_up,   incs_up,   'b.', ms=0.9, label="VH Up")
-plt.plot(u_v,    incs_v,    'g.', ms=0.9, label="V Only")
-plt.plot(u_down, incs_down, 'r.', ms=0.9, label="VH Down")
-plt.xlim(0, 360)
-plt.xlabel("Ângulo orbital u (graus)")  # robusto p/ circulares
-plt.ylabel("Inclinação i (graus)")
-plt.title("Inclinação vs u — última órbita completa (sem cortes)")
-plt.legend()
-plt.grid(alpha=0.3)
-plt.show()
+    # --------------------------- Massa × Tempo (última órbita) ---------------------------
+    plt.figure()
+    if X_up_o.shape[0]   >= 7: plt.plot(t_up_o,   X_up_o[6, :],   '-', color=COLOR_UP,   label="VH UP")
+    if X_v_o.shape[0]    >= 7: plt.plot(t_v_o,    X_v_o[6, :],    '-', color=COLOR_V,    label="V ONLY")
+    if X_down_o.shape[0] >= 7: plt.plot(t_down_o, X_down_o[6, :], '-', color=COLOR_DOWN, label="VH DOWN")
+    plt.xlabel("Tempo [s]"); plt.ylabel("Massa [kg]")
+    plt.title("Consumo de Propelente — ÚLTIMA órbita")
+    plt.grid(alpha=0.3); plt.legend(); plt.show()
+
+    # --------------------------- Inclinação × Fase (última órbita) ---------------------------
+    def _plot_i_vs_phase(phi, inc, color, label, ax):
+        dn = np.diff(phi); wraps = np.where(dn < -180.0)[0]
+        start = 0; first = True
+        for w in wraps:
+            ax.plot(phi[start:w+1], inc[start:w+1], color=color, label=(label if first else None))
+            first = False; start = w + 1
+        ax.plot(phi[start:], inc[start:], color=color, label=(label if first else None))
+
+    fig2, ax2 = plt.subplots()
+    _plot_i_vs_phase(phase_up_o,   incs_up_o,   COLOR_UP,   "VH UP",   ax2)
+    _plot_i_vs_phase(phase_v_o,    incs_v_o,    COLOR_V,    "V ONLY",  ax2)
+    _plot_i_vs_phase(phase_down_o, incs_down_o, COLOR_DOWN, "VH DOWN", ax2)
+    ax2.set_xlim(0, 360); ax2.grid(True)
+    ax2.set_xlabel(r'Fase (ν ou $u$) [deg]'); ax2.set_ylabel(r'$i$ [deg]')
+    ax2.set_title("Inclinação × Fase — ÚLTIMA órbita")
+    ax2.legend(); plt.show()
+
+    # --------------------------- RAAN (Ω) desenrolado × dias (última órbita) ---------------------------
+    plt.figure()
+    plt.plot(t_up_o/86400.0,   _unwrap_deg(E_up_o.Omega_deg),   '-', color=COLOR_UP,   label="VH UP")
+    plt.plot(t_v_o/86400.0,    _unwrap_deg(E_v_o.Omega_deg),    '-', color=COLOR_V,    label="V ONLY")
+    plt.plot(t_down_o/86400.0, _unwrap_deg(E_down_o.Omega_deg), '-', color=COLOR_DOWN, label="VH DOWN")
+    plt.xlabel("Tempo [dias]"); plt.ylabel("Ω (graus)")
+    plt.title("RAAN (Ω) desenrolado — ÚLTIMA órbita")
+    plt.grid(True); plt.legend(); plt.show()
+
+    # --------------------------- Painel a, e, i, Ω (última órbita) ---------------------------
+    fig, axs = plt.subplots(2, 2, figsize=(12, 8), constrained_layout=True)
+    # a (km)
+    axs[0,0].plot(t_up_o,   E_up_o.a,   color=COLOR_UP,   label="VH UP")
+    axs[0,0].plot(t_v_o,    E_v_o.a,    color=COLOR_V,    label="V ONLY")
+    axs[0,0].plot(t_down_o, E_down_o.a, color=COLOR_DOWN, label="VH DOWN")
+    axs[0,0].set_title("a (km)"); axs[0,0].set_xlabel("t (s)"); axs[0,0].grid(True)
+
+    # e (-)
+    axs[0,1].plot(t_up_o,   E_up_o.e,   color=COLOR_UP)
+    axs[0,1].plot(t_v_o,    E_v_o.e,    color=COLOR_V)
+    axs[0,1].plot(t_down_o, E_down_o.e, color=COLOR_DOWN)
+    axs[0,1].set_title("e"); axs[0,1].set_xlabel("t (s)"); axs[0,1].grid(True)
+
+    # i (deg)
+    axs[1,0].plot(t_up_o,   E_up_o.i_deg,   color=COLOR_UP)
+    axs[1,0].plot(t_v_o,    E_v_o.i_deg,    color=COLOR_V)
+    axs[1,0].plot(t_down_o, E_down_o.i_deg, color=COLOR_DOWN)
+    axs[1,0].set_title("i (graus)"); axs[1,0].set_xlabel("t (s)"); axs[1,0].grid(True)
+
+    # Ω (deg) desenrolado
+    axs[1,1].plot(t_up_o,   _unwrap_deg(E_up_o.Omega_deg),   color=COLOR_UP)
+    axs[1,1].plot(t_v_o,    _unwrap_deg(E_v_o.Omega_deg),    color=COLOR_V)
+    axs[1,1].plot(t_down_o, _unwrap_deg(E_down_o.Omega_deg), color=COLOR_DOWN)
+    axs[1,1].set_title("Ω (graus, desenrolado)"); axs[1,1].set_xlabel("t (s)"); axs[1,1].grid(True)
+
+    # Legenda única
+    handles, labels = axs[0,0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncols=3, frameon=False)
+    fig.suptitle("Comparativo de elementos — ÚLTIMA órbita", fontsize=12)
+    plt.show()

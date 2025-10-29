@@ -15,7 +15,7 @@ v = np.array([0.0, 5.383, 5.383])
 # r = np.array([10016.34, -17012.52, 7899.28])    # Exemplo elíptico
 # v = np.array([2.5, -1.05, 3.88])
 
-t = np.linspace(0, 43200, 10000)  # 12 h
+t = np.linspace(0, 4320000, 100000)  # 12 h
 earth_radius = 6378.0  # km
 mu = 3.986e5           # km^3/s^2
 thrust = 1.1e-3     # N
