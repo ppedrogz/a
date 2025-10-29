@@ -30,8 +30,8 @@ from achatamento import (
 )
 
 # ---- flags globais (podem ser sobrescritos por simulate(...)) ----
-_USE_J2  = True  # deixe True para incluir J2
-_USE_J22 = True    # ligue para incluir J22 tesseral
+_USE_J2  = False # deixe True para incluir J2
+_USE_J22 = False    # ligue para incluir J22 tesseral
 # rotação sideral da Terra (rad/s) — o padrão tesseral “gira” no ECI
 _GAMMA         = 7.2921150e-5
 # longitude do eixo do termo J22 (modelo GEM/ar_prs): -14.79 graus
@@ -89,8 +89,8 @@ if DUAL_THRUSTERS:
     Isp_V, Isp_H = Isp, Isp
 
 # ===================== Janelas em ângulo orbital =====================
-THRUST_INTERVAL_DEG = 30.0
-MEAN_THETA_LIST_DEG = [180]  # 180 = apogeu; 0 = perigeu
+THRUST_INTERVAL_DEG = 60
+MEAN_THETA_LIST_DEG = [0]  # 180 = apogeu; 0 = perigeu
 
 def wrap_deg(a): return np.remainder(a, 360.0)
 

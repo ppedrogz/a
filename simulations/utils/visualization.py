@@ -62,43 +62,44 @@ def plot_classic_orbital_elements(t: np.ndarray, elems: ElementsSeries):
     )
 
     # ajuste de escala mais adequada para visualização
-    fig, axs = plt.subplots(3, 2, figsize=(14, 10))  # maior figura
+    fig, axs = plt.subplots(2, 2, figsize=(14, 10))  # maior figura
     plt.subplots_adjust(hspace=0.4, wspace=0.3)
 
     # Linha 0: a e e
-    axs[0, 0].plot(t, elems.a, color="blue", lw=1.8)
-    axs[0, 0].set_title('Semi-eixo maior a [km]')
-    axs[0, 1].plot(t, elems.e, color="orange", lw=1.8)
-    axs[0, 1].set_title('Excentricidade e')
-    axs[0, 0].set_ylim(min(elems.a)*0.999, max(elems.a)*1.001)
-    axs[0, 1].set_ylim(-0.01, 0.01)
+    #axs[0, 0].plot(t, elems.a, color="blue", lw=1.8)
+    #axs[0, 0].set_title('Semi-eixo maior a [km]')
+    #axs[0, 1].plot(t, elems.e, color="orange", lw=1.8)
+   # axs[0, 1].set_title('Excentricidade e')
+  #  axs[0, 0].set_ylim(min(elems.a)*0.999, max(elems.a)*1.001)
+    #axs[0, 1].set_ylim(-0.01, 0.01)
 
     # Linha 1: i e RAAN
-    axs[1, 0].plot(t, elems.i_deg, color="green", lw=1.8)
-    axs[1, 0].set_title('Inclinação i [deg]')
-    axs[1, 0].set_ylim(min(elems.i_deg)*0.99, max(elems.i_deg)*1.01)
+    axs[0, 0].plot(t, elems.i_deg, color="green", lw=1.8)
+    axs[0, 0].set_title('Inclinação i [deg]')
+   # axs[1, 0].set_ylim(min(elems.i_deg)*0.99, max(elems.i_deg)*1.01)
 
-    axs[1, 1].plot(t, Om_s, color="red", lw=1.8)
-    axs[1, 1].set_title('RAAN Ω [deg]')
-    axs[1, 1].set_ylim(min(Om_s)*0.99, max(Om_s)*1.01)
+    axs[0, 1].plot(t, Om_s, color="red", lw=1.8)
+    axs[0, 1].set_title('RAAN Ω [deg]')
+    #axs[1, 1].set_ylim(min(Om_s)*0.99, max(Om_s)*1.01)
 
     # Linha 2: ω e ν (último gráfico à direita com legenda explicativa)
-    axs[2, 0].plot(t, u_s, color="cyan", lw=1.8)
-    axs[2, 0].set_title('Argumento de Latitude')
-    axs[2, 0].set_ylim(0, 360)
+   # axs[2, 0].plot(t, u_s, color="cyan", lw=1.8)
+    #axs[2, 0].set_title('Argumento de Latitude')
+   # axs[2, 0].set_ylim(0, 360)
 
-    axs[2, 1].plot(t, nu_pref, color="maroon", lw=1.8, label='Anomalia Verdadeira ν')
-    axs[2, 1].plot(t, w_s, color="purple", lw=1.3, linestyle='--', label='Argumento do Perigeu ω')
-    axs[2, 1].set_title('Anomalia Verdadeira e Argumento do Perigeu [deg]')
-    axs[2, 1].legend(loc='best', fontsize=9)
-    axs[2, 1].set_ylim(min(min(nu_pref), min(w_s))*0.99,
-                       max(max(nu_pref), max(w_s))*1.01)
+    axs[1, 0].plot(t, nu_pref, color="maroon", lw=1.8, label='Anomalia Verdadeira ν')
+    axs[1, 0].set_title('Anomalia Verdadeira [deg]')
+    axs[1, 1].plot(t, w_s, color="purple", lw=1.3, linestyle='--', label='Argumento do Perigeu ω')
+    axs[1, 1].set_title('Argumento do Perigeu [deg]')
+    #axs[2, 1].legend(loc='best', fontsize=9)
+    #axs[2, 1].set_ylim(min(min(nu_pref), min(w_s))*0.99,
+                       #max(max(nu_pref), max(w_s))*1.01)
 
     for ax in axs.ravel():
         ax.grid(True, linestyle='--', alpha=0.6)
         ax.set_xlabel('Tempo [s]')
         ax.set_xlim(t[0], t[-1])
 
-    fig.suptitle("Evolução dos Elementos Orbitais Clássicos (Problema de Dois Corpos)", fontsize=14, y=0.98)
+    fig.suptitle("Evolução dos Elementos Orbitais Clássicos Sat_VH_D", fontsize=14, y=0.98)
     fig.tight_layout(rect=[0, 0.03, 1, 0.96])
     return fig, axs
