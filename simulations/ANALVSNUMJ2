@@ -1,0 +1,278 @@
+import numpy as np
+import math
+import matplotlib.pyplot as plt
+import pandas as pd
+
+from scipy.integrate import solve_ivp
+
+# Se o arquivo "achatamento.py" estiver em simulations/achatamento.py
+from achatamento import EarthShapeParams, accel_achatamento_total
+
+# =================== Constantes Terra ===================
+MU = 3.986004418e5      # km^3/s^2
+RE = 6378.1363          # km
+J2 = 1.08262668e-3      # -
+OMEGA_E = 7.2921159e-5  # rad/s (rotação da Terra)
+
+# Tesseral grau-2 ordem-2 (EGM típico; pode ajustar)
+C22 = 1.574e-6
+S22 = -0.903e-6
+
+# =================== Utilidades ===================
+def norm(v): 
+    return float(np.linalg.norm(v))
+
+to_deg = np.degrees
+
+def rv_to_coe(r_km, v_kms, mu=MU):
+    r = np.array(r_km, dtype=float)
+    v = np.array(v_kms, dtype=float)
+    rmag = norm(r); vmag = norm(v)
+    h = np.cross(r, v); hmag = norm(h)
+    k = np.array([0.0, 0.0, 1.0])
+    n_vec = np.cross(k, h); nmag = norm(n_vec)
+    e_vec = (np.cross(v, h) / mu) - (r / rmag); e = norm(e_vec)
+    a = -mu / (2.0 * (vmag**2/2.0 - mu/rmag))
+    i = math.acos(h[2] / hmag)
+
+    # RAAN Ω
+    if nmag > 1e-14:
+        Omega = math.acos(n_vec[0] / nmag)
+        if n_vec[1] < 0: 
+            Omega = 2*math.pi - Omega
+    else:
+        Omega = 0.0
+
+    # argumento do perigeu ω
+    if e > 1e-14 and nmag > 1e-14:
+        omega = math.acos(np.dot(n_vec, e_vec) / (nmag * e))
+        if e_vec[2] < 0: 
+            omega = 2*math.pi - omega
+    else:
+        omega = 0.0
+
+    # anomalia verdadeira ν
+    if e > 1e-14:
+        nu = math.acos(np.dot(e_vec, r) / (e * rmag))
+        if np.dot(r, v) < 0: 
+            nu = 2*math.pi - nu
+    else:
+        if nmag > 1e-14:
+            nu = math.acos(np.dot(n_vec, r) / (nmag * rmag))
+            if r[2] < 0: 
+                nu = 2*math.pi - nu
+        else:
+            nu = 0.0
+    return a, e, i, Omega, omega, nu
+
+def j2_secular_rates(a_km, e, inc_rad):
+    """Taxas seculares analíticas (1ª ordem em J2): n, dΩ/dt, dω/dt, du/dt, em rad/s."""
+    n  = math.sqrt(MU / a_km**3)
+    p  = a_km * (1 - e**2)
+    fac = (3.0/2.0) * J2 * (RE**2) / (p**2) * n
+    dOmega = -fac * math.cos(inc_rad)
+    domega =  0.5 * fac * (5.0*math.cos(inc_rad)**2 - 1.0)
+    du     =  n + 0.75 * J2 * (RE**2) / (p**2) * n * (3.0*math.cos(inc_rad)**2 - 1.0)
+    return n, dOmega, domega, du
+
+# =================== Incrementos analíticos J22 (tesseral 2,2) ===================
+def j22_long_period_increments(t_array, a_km, e, inc_rad, Om_t, om_t, M0,
+                               theta_g0=0.0,
+                               C22_val=C22, S22_val=S22):
+    """
+    Incrementos analíticos (rad) de Ω, ω, u e i devido a J22 ao longo do tempo (não-ressonante).
+    Fórmulas (Kaula l=2,m=2) integradas assumindo ψ' ≈ Δ = Ω_E - n constante (1ª ordem).
+    """
+    t = np.asarray(t_array, dtype=float)
+    n = math.sqrt(MU / a_km**3)
+    p = a_km * (1 - e**2)
+
+    # Fase tesseral
+    psi_t = theta_g0 + OMEGA_E*t - Om_t - om_t - (M0 + n*t)
+    Delta = (OMEGA_E - n)
+    if abs(Delta) < 1e-12:  # evita divisão por zero (quase-ressonância)
+        Delta = np.sign(Delta) * 1e-12 if Delta != 0.0 else 1e-12
+
+    # Coeficiente dimensional
+    K = 3.0 * n * (RE/p)**2
+
+    # Amplitudes (Kaula l=2, m=2)
+    ci = np.cos(inc_rad); si = np.sin(inc_rad)
+    A_Om = -0.5 * K * (si**2)                 # dΩ/dt
+    A_om =  0.25 * K * (5.0*ci**2 - 1.0)      # dω/dt
+    A_u  =  0.25 * K * (3.0*ci**2 - 1.0)      # du/dt
+    B_i  = -0.5 * K * (si*ci)                 # di/dt com (C sin2ψ - S cos2ψ)
+
+    # Integrais:
+    # ∫[C cos2ψ + S sin2ψ] dt = [C sin2ψ - S cos2ψ]/(2Δ)
+    common_CS = (C22_val*np.sin(2.0*psi_t) - S22_val*np.cos(2.0*psi_t)) / (2.0*Delta)
+
+    # ∫[C sin2ψ - S cos2ψ] dt = [ -C cos2ψ - S sin2ψ ]/(2Δ)
+    common_SmC = ( -C22_val*np.cos(2.0*psi_t) - S22_val*np.sin(2.0*psi_t) ) / (2.0*Delta)
+
+    dOm22 = A_Om * common_CS
+    dom22 = A_om * common_CS
+    du22  = A_u  * common_CS
+    di22  = B_i  * common_SmC
+
+    return dOm22, dom22, du22, di22
+
+# =================== Condições iniciais ITASAT-2 ===================
+r0 = np.array([6877.452, 0.0, 0.0])        # km
+v0 = np.array([0.0, 5.383, 5.383])         # km/s
+t  = np.linspace(0.0, 43200.0, 10000)      # s (12 h)
+
+# Elementos iniciais (medidos de r,v)
+a, e_measured, inc, Om0, om0, nu0 = rv_to_coe(r0, v0)
+
+# Forçar e pequeno nas fórmulas analíticas
+e_used = 1.0e-4
+
+# Taxas seculares J2 (analítico, 1ª ordem) usando e_used
+n, dOm, dom, du = j2_secular_rates(a, e_used, inc)
+
+# Integração analítica dos ângulos (rad) — componente J2
+u0   = om0 + nu0
+Om_t = Om0 + dOm * t
+om_t = om0 + dom * t
+u_t  = u0  + du  * t
+nu_t = u_t - om_t
+i_t  = np.full_like(t, inc)  # J2 1ª ordem não altera i
+
+# J22 (tesseral 2,2): incrementos long-period analíticos
+M0 = nu0  # boa aproximação para e pequeno
+dOm22, dom22, du22, di22 = j22_long_period_increments(
+    t_array=t, a_km=a, e=e_used, inc_rad=inc,
+    Om_t=Om_t, om_t=om_t, M0=M0,
+    theta_g0=0.0, C22_val=C22, S22_val=S22
+)
+
+# Séries completas J2+J22 (analíticas)
+Om_t_J2J22 = Om_t + dOm22
+om_t_J2J22 = om_t + dom22
+u_t_J2J22  = u_t  + du22
+nu_t_J2J22 = u_t_J2J22 - om_t_J2J22
+i_t_J2J22  = i_t  + di22
+
+# Conversão para graus (unwrap onde é angular cíclico)
+Om_deg_anal_J2      = np.degrees(np.unwrap(Om_t))
+Om_deg_anal_J2J22   = np.degrees(np.unwrap(Om_t_J2J22))
+
+
+# =================== Dinâmica numérica (Cowell + achatamento) ===================
+params = EarthShapeParams()  # usa mu, Re, J2, J22 do seu módulo
+
+
+def eom_cowell(t_s, y, use_j2=True, use_j22=False):
+    """
+    Equações de movimento:
+    y = [x, y, z, vx, vy, vz] em km e km/s.
+    """
+    r = y[:3]
+    v = y[3:]
+
+    r_norm = norm(r)
+
+    # Gravidade central
+    a_grav = -MU * r / (r_norm**3)
+
+    # Ângulo de rotação da Terra (lambdat em rad)
+    lambdat_rad = OMEGA_E * t_s
+    lambda22_rad = 0.0  # pode ajustar se quiser
+
+    a_achat = accel_achatamento_total(
+        r_km=r,
+        p=params,
+        lambdat_rad=lambdat_rad,
+        lambda22_rad=lambda22_rad,
+        use_j2=use_j2,
+        use_j22=use_j22
+    )
+
+    a_total = a_grav + a_achat
+
+    return np.hstack((v, a_total))
+
+
+def propaga_orbita(use_j2=True, use_j22=False):
+    """
+    Integra 12 h com Cowell + achatamento (J2 ou J2+J22).
+    Retorna arrays de tempo (h) e Ω(t) em graus.
+    """
+    y0 = np.hstack((r0, v0))
+    t_span = (0.0, t[-1])
+    t_eval = t
+
+    sol = solve_ivp(
+        fun=lambda tt, yy: eom_cowell(tt, yy, use_j2=use_j2, use_j22=use_j22),
+        t_span=t_span,
+        y0=y0,
+        t_eval=t_eval,
+        rtol=1e-10,
+        atol=1e-12
+    )
+
+    # extrair elementos orbitais ao longo do tempo
+    Omega_series = []
+
+    for k in range(sol.y.shape[1]):
+        r_k = sol.y[0:3, k]
+        v_k = sol.y[3:6, k]
+        _, _, _, Om_k, _, _ = rv_to_coe(r_k, v_k)
+        Omega_series.append(Om_k)
+
+    Omega_series = np.array(Omega_series)
+    Omega_deg = np.degrees(np.unwrap(Omega_series))
+
+    t_hours = sol.t / 3600.0
+    return t_hours, Omega_deg
+
+
+if __name__ == "__main__":
+    # Numérico: J2 apenas
+    t_hours_num_J2, Om_deg_num_J2 = propaga_orbita(use_j2=True, use_j22=False)
+    # Numérico: J2 + J22
+    t_hours_num_J2J22, Om_deg_num_J2J22 = propaga_orbita(use_j2=True, use_j22=True)
+
+    # ========= Gráfico comparativo para RAAN =========
+    plt.figure(figsize=(10, 6))
+    plt.plot(t/3600.0, Om_deg_anal_J2, label=r'$\Omega$ analítico (J2)')
+    plt.plot(t_hours_num_J2, Om_deg_num_J2, '--', label=r'$\Omega$ numérico (J2)')
+    plt.xlabel('Tempo [h]')
+    plt.ylabel(r'$\Omega$ [graus]')
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig("comp_Omega_J2_anal_num.png", dpi=300)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(t/3600.0, Om_deg_anal_J2J22, label=r'$\Omega$ analítico (J2+J22)')
+    plt.plot(t_hours_num_J2J22, Om_deg_num_J2J22, '--', label=r'$\Omega$ numérico (J2+J22)')
+    plt.xlabel('Tempo [h]')
+    plt.ylabel(r'$\Omega$ [graus]')
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig("comp_Omega_J2J22_anal_num.png", dpi=300)
+
+    # Erros
+    err_J2   = Om_deg_num_J2   - Om_deg_anal_J2
+    err_J2J22 = Om_deg_num_J2J22 - Om_deg_anal_J2J22
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(t/3600.0, err_J2)
+    plt.xlabel('Tempo [h]')
+    plt.ylabel(r'Erro em $\Omega$ [graus] (num - anal) — J2')
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig("erro_Omega_J2.png", dpi=300)
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(t/3600.0, err_J2J22)
+    plt.xlabel('Tempo [h]')
+    plt.ylabel(r'Erro em $\Omega$ [graus] (num - anal) — J2+J22')
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig("erro_Omega_J2J22.png", dpi=300)
+
+    plt.show()

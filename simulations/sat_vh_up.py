@@ -10,7 +10,7 @@ from utils.orbitalElementsOperations import*
 r = np.array([6877.452, 0.0, 0.0])  # parametros orbitais ITASAT-2 (LEO quase circular)
 v = np.array([0.0, 5.383, 5.383])
 
-t = np.linspace(0, 4320000, 100000)  # 12 h
+t = np.linspace(0, 4320, 10000)  # 12 h
 earth_radius = 6378.0  # km
 mu = 3.986e5           # km^3/s^2
 
@@ -30,8 +30,8 @@ from achatamento import (
 )
 
 # ---- flags globais (podem ser sobrescritos por simulate(...)) ----
-_USE_J2  = False # deixe True para incluir J2
-_USE_J22 = False    # ligue para incluir J22 tesseral
+_USE_J2  = True # deixe True para incluir J2
+_USE_J22 = True   # ligue para incluir J22 tesseral
 # rotação sideral da Terra (rad/s) — o padrão tesseral “gira” no ECI
 _GAMMA         = 7.2921150e-5
 # longitude do eixo do termo J22 (modelo GEM/ar_prs): -14.79 graus
@@ -70,7 +70,7 @@ def _accel_achatamento(r_vec: np.ndarray, tval: float) -> np.ndarray:
 
 # ===================== Arrasto (opcional) =====================
 from Drag import accel_drag, DragParams
-_DRAG_ON = False
+_DRAG_ON = True
 _DRAG = DragParams(Cd=2.2, A_ref_m2=0.02, use_atmo_rotation=True,
                    rho0_kg_m3=3.614e-11, h0_km=200.0, H_km=50.0)
 def _accel_DRAG(r_vec, v_vec, m_cur):
@@ -90,7 +90,7 @@ if DUAL_THRUSTERS:
 
 # ===================== Janelas em ângulo orbital =====================
 THRUST_INTERVAL_DEG = 60
-MEAN_THETA_LIST_DEG = [180]  # 180 = apogeu; 0 = perigeu
+MEAN_THETA_LIST_DEG = [0]  # 180 = apogeu; 0 = perigeu
 
 def wrap_deg(a): return np.remainder(a, 360.0)
 
@@ -309,9 +309,9 @@ def _unwrap_deg(a_deg): return np.degrees(np.unwrap(np.radians(np.asarray(a_deg,
 Omega_series = Om_deg_series
 Omega_unw = _unwrap_deg(Omega_series)
 
-t_plot = t/86400.0  # dias
+t_plot = t  # dias
 fig, ax = plt.subplots()
-ax.plot(t_plot, Omega_unw, 'r-', lw=1.2, label='Ω (desenrolado)')
+ax.plot(t_plot, Omega_unw, 'r-', lw=1.2, label='Ω')
 add_thrust_spans(ax, t_plot, thr_H_on_mask, color="tab:orange", alpha=0.18, label="Empuxo H ON")
 ax.set_xlabel("Tempo [dias]"); ax.set_ylabel("Ω [graus]")
 ax.set_title("RAAN (VH UP) com janelas de empuxo H destacadas")
@@ -343,8 +343,9 @@ def plot_i_vs_phase_segmentado(phi_deg: np.ndarray, inc_deg: np.ndarray, *, ax=N
     ax.set_xlim(0.0, 360.0); ax.grid(True); return ax
 
 fig2, ax2 = plt.subplots()
-plot_i_vs_phase_segmentado(phase_deg, incs_deg, ax=ax2, color="red", lw=1.5, label="i vs. fase")
-ax2.legend(); plt.show()
+plot_i_vs_phase_segmentado(phase_deg, incs_deg, ax=ax2, color="blue", lw=1.5, label="i vs. fase")
+#ax2.legend(); 
+plt.show()
 
 # ===================== Interface com flags (j2, j22, drag) =====================
 def simulate(j2: bool = True, j22: bool = False, drag: bool = False):

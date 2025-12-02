@@ -15,10 +15,10 @@ v = np.array([0.0, 5.383, 5.383])
 # r = np.array([10016.34, -17012.52, 7899.28])    # Exemplo elíptico
 # v = np.array([2.5, -1.05, 3.88])
 
-t = np.linspace(0, 4320000, 100000)  # 12 h
+t = np.linspace(0, 4320, 10000)  # 12 h
 earth_radius = 6378.0  # km
 mu = 3.986e5           # km^3/s^2
-thrust = 1.1e-3     # N
+thrust =0   # N
 
 # ===================== Propulsão / massa =====================
 T   = thrust    # N
@@ -33,8 +33,8 @@ from achatamento import (
     EarthShapeParams as ShapeParams,
     accel_achatamento_total,
 )
-_USE_J2  = False
-_USE_J22 = False      # ligue para testar
+_USE_J2  = True
+_USE_J22 = True   # ligue para testar
 _GAMMA   = 7.2921150e-5     # rad/s, rotação da Terra em ECI (tesseral “gira”)
 LAMBDA22_DEG = -14.79 # lambdat = gamma * t (rad) 
 _SHAPE   = ShapeParams()  # μ, Re, J2, J22
@@ -60,7 +60,7 @@ def _accel_achatamento(r_vec: np.ndarray, tval: float) -> np.ndarray:
 
 # ===================== Arrasto atmosférico (opcional) =====================
 from Drag import accel_drag, DragParams
-_DRAG_ON = False
+_DRAG_ON = True
 _DRAG = DragParams(Cd=2.2, A_ref_m2=0.02, use_atmo_rotation=True,
                    rho0_kg_m3=3.614e-11, h0_km=200.0, H_km=50.0)
 
@@ -272,7 +272,7 @@ u_grid, vgrid = np.mgrid[0:2*np.pi:30j, 0:np.pi:15j]
 x_e = earth_radius * np.cos(u_grid) * np.sin(vgrid)
 y_e = earth_radius * np.sin(u_grid) * np.sin(vgrid)
 z_e = earth_radius * np.cos(vgrid)
-ax.plot_wireframe(x_e, y_e, z_e, color="g", alpha=0.3)
+ax.plot_wireframe(x_e, y_e, z_e, color="black", alpha=0.3)
 ax.plot3D(X[0, :], X[1, :], X[2, :], 'g', label="Satélite")
 ax.set_box_aspect([1, 1, 1])
 ax.set_title("Órbita simulada - Problema de dois corpos (Semi-circular - ITASAT 2)")
@@ -282,7 +282,7 @@ ax.axis('equal')
 # ---------- plot i(nu/u) ----------
 fig2, ax2 = plt.subplots()
 plot_i_vs_nu_segmentado(nus_deg, incs_deg, ax=ax2, color="green", lw=1.5, label='i vs. (ν ou u)')
-ax2.legend()
+#ax2.legend()
 plt.show()
 
 # ===================== Interface de simulação =====================
